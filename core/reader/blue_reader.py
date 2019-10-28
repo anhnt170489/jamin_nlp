@@ -57,7 +57,7 @@ class BiossesReader(BLUEReader):
             guid = "%s-%s" % (set_type, line[0])
             text_a = line[-3]
             text_b = line[-2]
-            label = float(line[-1])
+            label = str(round(float(line[-1])))
             examples.append(BLUEInstance(guid=guid, text_a=text_a, text_b=text_b, label=label))
         return examples
 
