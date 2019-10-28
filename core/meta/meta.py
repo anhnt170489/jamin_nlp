@@ -21,3 +21,11 @@ class QAInstance(object):
         self.question = question
         self.answer = answer
         self.label = label
+
+
+class BLUEInstance(object):
+    def __init__(self, guid, text_a, text_b, label):
+        self.guid = guid
+        self.text_a = text_a
+        self.text_b = text_b
+        self.label = label
