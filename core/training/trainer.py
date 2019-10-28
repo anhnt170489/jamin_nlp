@@ -13,7 +13,7 @@ from core.eval import Evaluator
 from core.processor import InstanceProcessor
 from libs.opt import Lamb, RAdam
 from libs.transformers import AdamW, WarmupLinearSchedule
-from utils import save_model, log_result
+from utils import log_result, save_model
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +21,37 @@ ADAMW, RADAM, LAMB = 'adamw', 'radam', 'lamb'
 
 
 class Trainer(object):
+    @staticmethod
+    def log_and_save_model(args, eval_instances, model, metrics, global_step, best_score, curr_loss, logging_loss,
+                           curr_lr=None):
+        do_save_model = True
+        # Log metrics
+        new_best_result = None
+        new_best_score = best_score
+        if args.local_rank == -1 and args.evaluate_during_training:  # Only evaluate when single GPU otherwise metrics may not average well
+            result = Evaluator.evaluate(eval_instances, model, args, metrics=metrics)
+            if args.eval_measure in result and result[args.eval_measure] > best_score:
+                new_best_score = result[args.eval_measure]
+                new_best_result = result
+                do_save_model = True
+            else:
+                do_save_model = False
+
+            if curr_lr:
+                logging.info('lr %f', curr_lr)
+            logging.info('loss %f', (curr_loss - logging_loss) / args.logging_steps)
+            logging.info("Step results")
+            log_result(result)
+            if new_best_result:
+                logging.info("Best results")
+                log_result(new_best_result)
+        new_logging_loss = curr_loss
+
+        if do_save_model:
+            save_model(args, model, global_step)
+
+        return new_best_score, new_logging_loss
+
     @staticmethod
     def train(train_instances, model, args, eval_instances=None, metrics=None):
 
@@ -122,24 +153,12 @@ class Trainer(object):
 
                     # Evaluate during training if configured
                     if args.local_rank in [-1, 0] and args.logging_steps > 0 and global_step % args.logging_steps == 0:
-                        # Log metrics
-                        if args.local_rank == -1 and args.evaluate_during_training:  # Only evaluate when single GPU otherwise metrics may not average well
-                            result = Evaluator.evaluate(eval_instances, model, args, metrics=metrics)
-                            if args.eval_measure in result and result[args.eval_measure] > best_score:
-                                best_score = result[args.eval_measure]
-                                best_result = result
-                            if optimizer_type != RADAM:
-                                logging.info('lr %f', scheduler.get_lr()[0])
-                            logging.info('loss %f', (tr_loss - logging_loss) / args.logging_steps)
-                            logging.info("Step results")
-                            log_result(result)
-                            if best_result:
-                                logging.info("Best results")
-                                log_result(best_result)
-                        logging_loss = tr_loss
-
-                    if args.local_rank in [-1, 0] and args.save_steps > 0 and global_step % args.save_steps == 0:
-                        save_model(args, model, global_step)
+                        best_score, logging_loss = Trainer.log_and_save_model(args, eval_instances, model, metrics,
+                                                                              global_step,
+                                                                              best_score,
+                                                                              tr_loss, logging_loss,
+                                                                              scheduler.get_lr()[
+                                                                                  0] if optimizer_type != RADAM else None)
 
                 if args.max_steps > 0 and global_step > args.max_steps:
                     epoch_iterator.close()
@@ -149,7 +168,11 @@ class Trainer(object):
                 iterator.close()
                 break
 
-        if args.save_steps > 0 and global_step % args.save_steps != 0:
-            save_model(args, model, global_step)
+        if args.local_rank in [-1, 0] and args.logging_steps > 0 and global_step % args.logging_steps != 0:
+            Trainer.log_and_save_model(args, eval_instances, model, metrics,
+                                       global_step,
+                                       best_score,
+                                       tr_loss, logging_loss,
+                                       scheduler.get_lr()[0] if optimizer_type != RADAM else None)
 
         return global_step, tr_loss / global_step
