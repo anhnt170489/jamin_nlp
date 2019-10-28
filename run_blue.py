@@ -238,7 +238,9 @@ def main():
         ignored_labels = ['false']
 
     if ignored_labels:
-        args.ignored_labels = [args.labels.index(ignored_label) for ignored_label in ignored_labels]
+        ignored_labels = [args.labels.index(ignored_label) for ignored_label in ignored_labels]
+
+    args.ignored_labels = ignored_labels
 
     if args.corpus in [HOC]:
         from sklearn.preprocessing import MultiLabelBinarizer
