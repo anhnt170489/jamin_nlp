@@ -7,7 +7,7 @@ import numpy as np
 import torch
 
 from core.meta import BertInstance
-from core.reader import BiossesReader, BC5CDRReader, DDI2013Readers, ChemProtReaders  # , HOCReader
+from core.reader import BiossesReader, BC5CDRReader, DDI2013Readers, ChemProtReaders, HOCReader
 from core.training import Trainer
 from libs.transformers import BertTokenizer, BertConfig, RobertaConfig
 
@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 from utils import cache_data, load_cached_data
 
-from core.models import BertSequenceClassification, BertTokenClassification  # , BertMultilabelClassification
+from core.models import BertSequenceClassification, BertTokenClassification, BertMultilabelClassification
 from core.eval import AccAndF1Metrics, PearsonAndSpearman, Evaluator
 
 import glob
@@ -30,7 +30,7 @@ BIOSSES, BC5CDR, HOC, DDI, CHEMPROT = 'biosses', 'bc5cdr', 'hoc', 'ddi', 'chempr
 
 CLASS_TYPES = {BIOSSES: (BiossesReader, BertSequenceClassification, PearsonAndSpearman),
                BC5CDR: (BC5CDRReader, BertTokenClassification, AccAndF1Metrics),
-               # HOC: (HOCReader, BertMultilabelClassification, AccAndF1Metrics),
+               HOC: (HOCReader, BertMultilabelClassification, AccAndF1Metrics),
                DDI: (DDI2013Readers, BertSequenceClassification, AccAndF1Metrics),
                CHEMPROT: (ChemProtReaders, BertSequenceClassification, AccAndF1Metrics),
                }
