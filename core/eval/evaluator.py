@@ -1,6 +1,5 @@
 import logging
 
-import numpy as np
 import torch
 from torch.utils.data import (
     DataLoader,
@@ -69,8 +68,8 @@ class Evaluator(object):
 
         model.zero_grad()
 
-        preds = None
-        golds = None
+        preds = []
+        golds = []
 
         for step, data_ids in enumerate(
                 tqdm(data_loader, desc="Iteration", disable=args.local_rank not in [-1, 0])
@@ -94,13 +93,8 @@ class Evaluator(object):
 
                 if not predict:
 
-                    if preds is None:
-                        preds = batch_predict
-                        golds = batch_golds
-
-                    else:
-                        preds = np.append(batch_predict, preds, axis=0)
-                        golds = np.append(batch_golds, golds, axis=0)
+                    preds.append(batch_predict)
+                    golds.append(batch_golds)
 
                     tmp_eval_loss = outputs[LOSS]
                     eval_loss += tmp_eval_loss.mean().item()
