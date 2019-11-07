@@ -100,8 +100,6 @@ def main():
                         help="Linear warmup over warmup_steps.")
     parser.add_argument("--eval_measure", default='f1', type=str,
                         help="Measure to evaluate.")
-    parser.add_argument('--save_steps', type=int, default=50,
-                        help="Save checkpoint every X updates steps.")
     parser.add_argument('--logging_steps', type=int, default=50,
                         help="Log every X updates steps.")
     parser.add_argument("--evaluate_during_training", action='store_true',
@@ -262,7 +260,7 @@ def main():
     if args.do_train:
         logger.info("Start training")
         if args.evaluate_during_training:
-            metrics = metrics_class
+            metrics = metrics_class()
             global_step, tr_loss = Trainer.train(train_instances, model, args, eval_instances=dev_instances,
                                                  metrics=metrics)
         else:
@@ -276,7 +274,7 @@ def main():
         os.system(command)
 
         # Prepare metrics
-        metrics = metrics_class
+        metrics = metrics_class()
 
         # Evaluation
         best_check_point = None
