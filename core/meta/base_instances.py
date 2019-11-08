@@ -168,10 +168,15 @@ class BertInstance(SequenceInstance):
         self.configs['cls_token_at_end'] = cls_token_at_end
         self.configs['pad_on_left'] = pad_on_left
         self.configs['use_last_subword'] = args.use_last_subword
+        self.configs['use_all_subwords'] = args.use_all_subwords
         # reservation
         self.configs['mask_padding_with_zero'] = True
 
-        if self.configs['use_last_subword']:
+        if self.configs['use_all_subwords']:
+            import functools, operator
+            subword_tokens = [self.tokenizer.tokenize((token)) for token in self.tokens]
+            subword_tokens = functools.reduce(operator.iconcat, subword_tokens, [])
+        elif self.configs['use_last_subword']:
             subword_tokens = [self.tokenizer.tokenize((token))[-1] for token in self.tokens]
         else:
             subword_tokens = [self.tokenizer.tokenize((token))[0] for token in self.tokens]
