@@ -6,10 +6,12 @@ import random
 import numpy as np
 import torch
 
+from core.common import *
 from core.meta import BertInstance
 from core.reader import BiossesReader, BC5CDRReader, DDI2013Readers, ChemProtReaders, HOCReader
 from core.training import Trainer
 from libs.transformers import BertTokenizer, BertConfig, RobertaConfig
+from utils import log_eval_result
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +106,8 @@ def main():
                         help="Log every X updates steps.")
     parser.add_argument("--evaluate_during_training", action='store_true',
                         help="Run evaluation during training at each logging step.")
+    parser.add_argument("--logging_eval_to_file", action='store_true',
+                        help="Logging eval results to file eval.log in the output_dir")
     parser.add_argument('--overwrite_output_dir', action='store_true',
                         help="Overwrite the content of the output directory")
 
@@ -143,6 +147,8 @@ def main():
     parser.add_argument("--use_last_subword", action='store_true',
                         help="Set this flag if you choose the last subword to present the word. "
                              "If not, the first subword will be choosen")
+    parser.add_argument("--use_all_subwords", action='store_true',
+                        help="Set this flag if you choose all the subwords to present the word. ")
 
     parser.add_argument("--corpus", default=None, type=str, required=True,
                         help="The data sets to train selected in the list: " + ", ".join(CLASS_TYPES.keys()))
@@ -278,7 +284,6 @@ def main():
 
         # Evaluation
         best_check_point = None
-        best_result = None
         best_score = -float('inf')
         results = {}
         if args.local_rank in [-1, 0]:
@@ -295,22 +300,15 @@ def main():
                 result = Evaluator.evaluate(dev_instances, model, args, metrics=metrics)
                 if args.eval_measure in result and result[args.eval_measure] > best_score:
                     best_score = result[args.eval_measure]
-                    best_result = result
-                    best_result['step'] = global_step
+                    result[BEST_STEP] = global_step
                     best_check_point = checkpoint
+                else:
+                    result[STEP] = global_step
                 result = dict((k + '_{}'.format(global_step), v) for k, v in result.items())
                 results.update(result)
 
-            # Write best result
-            if best_result:
-                with open(output_eval_file, "a+") as writer:
-                    logger.info("***** Best result at step {} *****".format(best_result['step']))
-                    writer.write("***** Best result at step {} *****".format(best_result['step']))
-                    for key in sorted(best_result.keys()):
-                        if key != 'step':
-                            logger.info("  %s = %s", key, str(best_result[key]))
-                            writer.write("%s = %s\n" % (key, str(best_result[key])))
-                    writer.write('\n')
+                # Write result
+                log_eval_result(result, output_eval_file)
 
 
 if __name__ == "__main__":
