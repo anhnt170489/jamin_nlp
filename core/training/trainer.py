@@ -12,13 +12,13 @@ from tqdm import tqdm, trange
 from core.common import *
 from core.eval import Evaluator
 from core.processor import InstanceProcessor
-from libs.opt import Lamb, RAdam
+from libs.opt import Lamb, RAdam, Ranger
 from libs.transformers import AdamW, WarmupLinearSchedule
 from utils import log_eval_result, save_model
 
 logger = logging.getLogger(__name__)
 
-ADAMW, RADAM, LAMB = 'adamw', 'radam', 'lamb'
+ADAMW, RADAM, LAMB, RANGER = 'adamw', 'radam', 'lamb', 'ranger'
 
 
 class Trainer(object):
@@ -87,10 +87,12 @@ class Trainer(object):
             optimizer = Lamb(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
         elif optimizer_type == RADAM:
             optimizer = RAdam(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
+        elif optimizer_type == RANGER:
+            optimizer = Ranger(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
         else:
             optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
 
-        if optimizer_type != RADAM:
+        if optimizer_type not in [RADAM, RANGER]:
             scheduler = WarmupLinearSchedule(optimizer, warmup_steps=args.warmup_steps, t_total=t_total)
 
         if args.fp16:
@@ -154,8 +156,12 @@ class Trainer(object):
 
                 tr_loss += loss.item()
                 if (step + 1) % args.gradient_accumulation_steps == 0:
+                    if args.fp16:
+                        torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), args.max_grad_norm)
+                    else:
+                        torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
                     optimizer.step()
-                    if optimizer_type != RADAM:
+                    if optimizer_type not in [RADAM, RANGER]:
                         scheduler.step()  # Update learning rate schedule
                     model.zero_grad()
                     global_step += 1
