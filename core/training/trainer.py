@@ -1,4 +1,5 @@
 import logging
+import os
 
 import torch
 from torch.utils.data import (
@@ -13,7 +14,7 @@ from core.eval import Evaluator
 from core.processor import InstanceProcessor
 from libs.opt import Lamb, RAdam
 from libs.transformers import AdamW, WarmupLinearSchedule
-from utils import log_result, save_model
+from utils import log_eval_result, save_model
 
 logger = logging.getLogger(__name__)
 
@@ -26,25 +27,24 @@ class Trainer(object):
                            curr_lr=None):
         do_save_model = True
         # Log metrics
-        new_best_result = None
         new_best_score = best_score
+        output_eval_log = args.output_eval_log
+
         if args.local_rank == -1 and args.evaluate_during_training:  # Only evaluate when single GPU otherwise metrics may not average well
             result = Evaluator.evaluate(eval_instances, model, args, metrics=metrics)
             if args.eval_measure in result and result[args.eval_measure] > best_score:
                 new_best_score = result[args.eval_measure]
-                new_best_result = result
+                result[BEST_STEP] = global_step
                 do_save_model = True
             else:
+                result[STEP] = global_step
                 do_save_model = False
 
             if curr_lr:
                 logging.info('lr %f', curr_lr)
             logging.info('loss %f', (curr_loss - logging_loss) / args.logging_steps)
             logging.info("Step results")
-            log_result(result)
-            if new_best_result:
-                logging.info("Best results")
-                log_result(new_best_result)
+            log_eval_result(result, output_eval_log)
         new_logging_loss = curr_loss
 
         if do_save_model:
@@ -115,6 +115,15 @@ class Trainer(object):
         model.zero_grad()
         best_result = None
         best_score = -float('inf')
+
+        if args.logging_eval_to_file:
+            # Remove old eval.log file:
+            output_eval_log = os.path.join(args.output_dir, "eval.log")
+            command = 'rm ' + output_eval_log
+            os.system(command)
+        else:
+            output_eval_log = None
+        args.output_eval_log = output_eval_log
 
         for _ in iterator:
             epoch_iterator = tqdm(data_loader, desc="Iteration", disable=args.local_rank not in [-1, 0])

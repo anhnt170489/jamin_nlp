@@ -1,6 +1,9 @@
 import numpy as np
+from beautifultable import BeautifulTable
 from scipy.stats import pearsonr, spearmanr
 from sklearn.metrics import f1_score
+
+from core.common import PRINT
 
 
 def remove_ignore_labels(preds, label_ids, ignored_labels):
@@ -114,6 +117,24 @@ class AccAndF1Metrics(Metrics):
 
 class PearsonAndSpearman(Metrics):
 
+    def to_table(self, pearson_corr, spearman_corr):
+        table = BeautifulTable()
+
+        table.column_headers = [
+            "Pearson",
+            "Spearmanr",
+            "Corr",
+        ]
+
+        table.column_alignments["Pearson"] = BeautifulTable.ALIGN_RIGHT
+        table.column_alignments["Spearmanr"] = BeautifulTable.ALIGN_RIGHT
+        table.column_alignments["Corr"] = BeautifulTable.ALIGN_RIGHT
+
+        table.set_style(BeautifulTable.STYLE_COMPACT)
+        table.append_row((pearson_corr, spearman_corr, (pearson_corr + spearman_corr) / 2))
+
+        return table
+
     def compute(self, preds, golds):
         _preds = None
         _golds = None
@@ -127,8 +148,37 @@ class PearsonAndSpearman(Metrics):
 
         pearson_corr = pearsonr(_preds, _golds)[0]
         spearman_corr = spearmanr(_preds, _golds)[0]
+        to_print = '\n' + str(self.to_table(pearson_corr, spearman_corr))
         return {
             "pearson": pearson_corr,
             "spearmanr": spearman_corr,
             "corr": (pearson_corr + spearman_corr) / 2,
+            PRINT: to_print
+        }
+
+
+class SpanClassificationMetrics(Metrics):
+    def __init__(self, labels=[], beta=1.0):
+        self._labels = labels
+        self.single_scores = {
+            label: SpanClassificationFscore(labels=[label], beta=beta) for label in labels
+        }
+        self.overall_score = SpanClassificationFscore(labels=labels, beta=beta)
+
+    def compute(self, preds, golds):
+        for batch_predicts, batch_golds in zip(preds, golds):
+            for sentence_index in range(len(batch_golds)):
+                for label in self._labels:
+                    self.single_scores[label](
+                        batch_predicts[sentence_index], batch_golds[sentence_index]
+                    )
+
+                self.overall_score(
+                    batch_predicts[sentence_index], batch_golds[sentence_index]
+                )
+
+        return {
+            "precision": self.overall_score.precision,
+            "recall": self.overall_score.recall,
+            "f1": self.overall_score.fscore
         }
