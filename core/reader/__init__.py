@@ -1,3 +1,4 @@
 # -*- coding: utf-8 -*-
-from .tsv_data_reader import TSVDataReader
+from .json_data_reader import JsonDataReader
 from .standoff_data_reader import StandoffDataReader
+from .tsv_data_reader import TSVDataReader
