@@ -160,8 +160,8 @@ class BertTokenInstance(BertInstance):
 
     def __init__(self, args, tokens, token_labels=None):
         super().__init__(args)
-        self.tokenizer = BertTokenInstance.__bert['tokenizer']
-        self.model = BertTokenInstance.__bert['model']
+        self.tokenizer = BertTokenInstance.get_bert()['tokenizer']
+        self.model = BertTokenInstance.get_bert()['model']
         self.tokens = tokens
 
         if token_labels:
@@ -172,7 +172,7 @@ class BertTokenInstance(BertInstance):
         pad_on_left = bool(args.model_type in ['xlnet'])
 
         self.configs = defaultdict()
-        self.configs['model_config'] = BertTokenInstance.__bert['model_config']
+        self.configs['model_config'] = BertTokenInstance.get_bert()['model_config']
         self.configs['max_seq_length'] = args.max_seq_length
         self.configs['cls_token_at_end'] = cls_token_at_end
         self.configs['pad_on_left'] = pad_on_left
@@ -254,10 +254,10 @@ class BertSequenceInstance(BertInstance):
 
     def __init__(self, args, sequence, pair=None):
         super().__init__(args)
-        self.tokenizer = BertSequenceInstance._bert['tokenizer']
-        self.model = BertSequenceInstance._bert['model']
+        self.tokenizer = BertSequenceInstance.get_bert()['tokenizer']
+        self.model = BertSequenceInstance.get_bert()['model']
         self.configs = defaultdict()
-        self.configs['model_config'] = BertTokenInstance._bert['model_config']
+        self.configs['model_config'] = BertSequenceInstance.get_bert()['model_config']
         self.configs['max_seq_length'] = args.max_seq_length
         pad_on_left = bool(args.model_type in ['xlnet'])
         self.configs['pad_on_left'] = pad_on_left
@@ -297,11 +297,12 @@ class BertSequenceInstance(BertInstance):
         return len(self.input_ids)
 
 
-def BertQAInstance(BertInstance):
+class BertQAInstance(BertInstance):
     """Bert instance for QA task, a special instance of Bert Instance"""
 
     def __init__(self, args, query_tokens, doc_tokens):
         super().__init__(args)
-        self.tokenizer = BertTokenInstance._bert['tokenizer']
-        self.model = BertTokenInstance._bert['model']
-
+        self.tokenizer = BertQAInstance.get_bert()['tokenizer']
+        self.model = BertQAInstance.get_bert()['model']
+        self.query_tokens = query_tokens
+        self.doc_tokens = doc_tokens
