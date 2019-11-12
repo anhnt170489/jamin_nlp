@@ -16,7 +16,7 @@ class BertSequenceClassification(BertPreTrainedModel):
         self._label_map = {i: label for i, label in enumerate(args.labels)}
         self._num_labels = len(args.labels)
 
-        self._bert = BertInstance.get_bert(self.args)['model']
+        self._bert = BertInstance.get_bert(args)['model']
         self._dropout = nn.Dropout(bert_config.hidden_dropout_prob)
 
         self._classifier = nn.Linear(bert_config.hidden_size, self._num_labels)
