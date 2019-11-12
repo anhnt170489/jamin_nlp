@@ -144,26 +144,35 @@ class BertInstance(SequenceInstance):
             BertInstance.__bert = {'tokenizer': tokenizer, 'model': model, 'model_config': config}
         return BertInstance.__bert
 
-    def __init__(self, args, tokens=None, text=None, token_labels=None):
+    def __init__(self, args):
         if not BertInstance.__bert:
             BertInstance.get_bert(args)
-        self.tokenizer = BertInstance.__bert['tokenizer']
-        self.model = BertInstance.__bert['model']
-        if not tokens:
-            self.tokens = self.tokenizer.basic_tokenizer.tokenize(text)
-        else:
-            self.tokens = tokens
+
+    def pad(self, padding_length):
+        raise NotImplementedError()
+
+    def to_tensors(self):
+        raise NotImplementedError()
+
+
+class BertTokenInstance(BertInstance):
+    """Bert Token instance, a special instance of Bert Instance"""
+
+    def __init__(self, args, tokens, token_labels=None):
+        super().__init__(args)
+        self.tokenizer = BertTokenInstance.__bert['tokenizer']
+        self.model = BertTokenInstance.__bert['model']
+        self.tokens = tokens
+
         if token_labels:
             label_map = {label: i for i, label in enumerate(args.labels)}
             token_labels = [label_map[lbl] for lbl in token_labels]
 
-        sep_token_extra = bool(args.model_type in ['roberta'])
         cls_token_at_end = bool(args.model_type in ['xlnet'])
         pad_on_left = bool(args.model_type in ['xlnet'])
 
         self.configs = defaultdict()
-        self.configs['model_config'] = BertInstance.__bert['model_config']
-        self.configs['sep_token_extra'] = sep_token_extra
+        self.configs['model_config'] = BertTokenInstance.__bert['model_config']
         self.configs['max_seq_length'] = args.max_seq_length
         self.configs['cls_token_at_end'] = cls_token_at_end
         self.configs['pad_on_left'] = pad_on_left
@@ -181,8 +190,8 @@ class BertInstance(SequenceInstance):
         else:
             subword_tokens = [self.tokenizer.tokenize((token))[0] for token in self.tokens]
 
-        # Account for [CLS] and [SEP] with "- 2" and with "- 3" for RoBERTa.
-        special_tokens_count = 3 if self.configs['sep_token_extra'] else 2
+        # Account for [CLS] and [SEP] with "- 2"
+        special_tokens_count = 2
         if len(subword_tokens) > self.configs['max_seq_length'] - special_tokens_count:
             subword_tokens = subword_tokens[:(self.configs['max_seq_length'] - special_tokens_count)]
             if token_labels:
@@ -193,11 +202,6 @@ class BertInstance(SequenceInstance):
         if token_labels:
             token_labels = token_labels + [-1]
 
-        if self.configs['sep_token_extra']:
-            # roberta uses an extra separator b/w pairs of sentences
-            subword_tokens += [sep_token]
-            if token_labels:
-                token_labels = token_labels + [-1]
         cls_token = self.tokenizer.cls_token
 
         if self.configs['cls_token_at_end']:
@@ -243,3 +247,61 @@ class BertInstance(SequenceInstance):
 
     def __len__(self):
         return len(self.input_ids)
+
+
+class BertSequenceInstance(BertInstance):
+    """Bert Sequence instance, a special instance of Bert Instance"""
+
+    def __init__(self, args, sequence, pair=None):
+        super().__init__(args)
+        self.tokenizer = BertSequenceInstance._bert['tokenizer']
+        self.model = BertSequenceInstance._bert['model']
+        self.configs = defaultdict()
+        self.configs['model_config'] = BertTokenInstance._bert['model_config']
+        self.configs['max_seq_length'] = args.max_seq_length
+        pad_on_left = bool(args.model_type in ['xlnet'])
+        self.configs['pad_on_left'] = pad_on_left
+
+        # reservation
+        self.configs['mask_padding_with_zero'] = True
+        inputs = self.tokenizer.encode_plus(
+            sequence,
+            pair,
+            add_special_tokens=True,
+            max_length=self.configs['max_seq_length'],
+        )
+        self.input_ids = inputs["input_ids"]
+        # The mask has 1 for real tokens and 0 for padding tokens. Only real
+        # tokens are attended to.
+        self.input_mask = [1 if self.configs['mask_padding_with_zero'] else 0] * len(self.input_ids)
+
+    def pad(self, padding_length):
+        length_to_pad = padding_length - len(self)
+        pad_token = self.tokenizer.convert_tokens_to_ids([self.tokenizer.pad_token])[0]
+        if self.configs['pad_on_left']:
+            self.input_ids = ([pad_token] * length_to_pad) + self.input_ids
+            self.input_mask = ([0 if self.configs['mask_padding_with_zero'] else 1] * length_to_pad) + self.input_mask
+        else:
+            self.input_ids = self.input_ids + ([pad_token] * length_to_pad)
+            self.input_mask = self.input_mask + ([0 if self.configs['mask_padding_with_zero'] else 1] * length_to_pad)
+
+        assert len(self.input_ids) == padding_length
+        assert len(self.input_mask) == padding_length
+
+        return self
+
+    def to_tensors(self):
+        return (torch.tensor(self.input_ids, dtype=torch.long), torch.tensor(self.input_mask, dtype=torch.long))
+
+    def __len__(self):
+        return len(self.input_ids)
+
+
+def BertQAInstance(BertInstance):
+    """Bert instance for QA task, a special instance of Bert Instance"""
+
+    def __init__(self, args, query_tokens, doc_tokens):
+        super().__init__(args)
+        self.tokenizer = BertTokenInstance._bert['tokenizer']
+        self.model = BertTokenInstance._bert['model']
+

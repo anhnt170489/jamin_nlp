@@ -28,7 +28,7 @@ class InstanceProcessor(object):
                                                             dim=0).to(device)
                         batch[k]['input_mask'] = torch.stack([instance.to_tensors()[1] for instance in instances],
                                                              dim=0).to(device)
-                        if instances[0].to_tensors()[2] is not None:
+                        if len(instances[0].to_tensors()) > 2 and instances[0].to_tensors()[2] is not None:
                             batch[k]['token_labels'] = torch.stack([instance.to_tensors()[2] for instance in instances],
                                                                    dim=0).to(device)
 
