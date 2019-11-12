@@ -4,7 +4,8 @@ import os
 from tqdm import tqdm
 
 from core.common import META_DATA
-from core.meta import BLUEInstance, BertInstance, LabelInstance, MultiLabelInstance
+from core.meta import BLUEInstance, BertSequenceInstance, BertTokenInstance, LabelInstance, MultiLabelInstance
+from .json_data_reader import JsonDataReader
 from .tsv_data_reader import TSVDataReader
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
@@ -68,11 +69,7 @@ class BiossesReader(BLUEReader):
         logger.info("Convert text instances to model instances")
         intances = []
         for instance in tqdm(text_instances):
-            if instance.text_b:
-                text = instance.text_a + ' ' + instance.text_b
-            else:
-                text = instance.text_a
-            sequence_instance = BertInstance(text=text, args=self.args)
+            sequence_instance = BertSequenceInstance(sequence=instance.text_a, pair=instance.text_b, args=self.args)
             label = LabelInstance(self.label_map[instance.label], instance.label)
             metadata = {'guid': instance.guid}
             intances.append({
@@ -119,7 +116,7 @@ class BC5CDRReader(BLUEReader):
         intances = []
         for instance in tqdm(text_instances):
             tokens = instance.text_a
-            sequence_instance = BertInstance(tokens=tokens, token_labels=instance.label, args=self.args)
+            sequence_instance = BertTokenInstance(tokens=tokens, token_labels=instance.label, args=self.args)
             metadata = {'guid': instance.guid}
             intances.append({
                 'tokens': sequence_instance,
@@ -156,11 +153,7 @@ class HOCReader(BLUEReader):
         logger.info("Convert text instances to model instances")
         intances = []
         for instance in tqdm(text_instances):
-            if instance.text_b:
-                text = instance.text_a + ' ' + instance.text_b
-            else:
-                text = instance.text_a
-            sequence_instance = BertInstance(text=text, args=self.args)
+            sequence_instance = BertSequenceInstance(sequence=instance.text_a, pair=instance.text_b, args=self.args)
             label = MultiLabelInstance(instance.label, self.get_labels())
             metadata = {'guid': instance.guid}
             intances.append({
@@ -171,7 +164,7 @@ class HOCReader(BLUEReader):
         return intances
 
 
-class DDI2013Readers(BLUEReader):
+class DDI2013Reader(BLUEReader):
 
     def get_labels(self):
         return ["DDI-advise", "DDI-effect", "DDI-int", "DDI-mechanism", 'DDI-false']
@@ -207,11 +200,7 @@ class DDI2013Readers(BLUEReader):
         logger.info("Convert text instances to model instances")
         intances = []
         for instance in tqdm(text_instances):
-            if instance.text_b:
-                text = instance.text_a + ' ' + instance.text_b
-            else:
-                text = instance.text_a
-            sequence_instance = BertInstance(text=text, args=self.args)
+            sequence_instance = BertSequenceInstance(sequence=instance.text_a, pair=instance.text_b, args=self.args)
             label = LabelInstance(self.label_map[instance.label], instance.label)
             metadata = {'guid': instance.guid}
             intances.append({
@@ -222,7 +211,7 @@ class DDI2013Readers(BLUEReader):
         return intances
 
 
-class ChemProtReaders(BLUEReader):
+class ChemProtReader(BLUEReader):
 
     def get_labels(self):
         return ["CPR:3", "CPR:4", "CPR:5", "CPR:6", "CPR:9", "false"]
@@ -258,11 +247,66 @@ class ChemProtReaders(BLUEReader):
         logger.info("Convert text instances to model instances")
         intances = []
         for instance in tqdm(text_instances):
-            if instance.text_b:
-                text = instance.text_a + ' ' + instance.text_b
-            else:
-                text = instance.text_a
-            sequence_instance = BertInstance(text=text, args=self.args)
+            sequence_instance = BertSequenceInstance(sequence=instance.text_a, pair=instance.text_b, args=self.args)
+            label = LabelInstance(self.label_map[instance.label], instance.label)
+            metadata = {'guid': instance.guid}
+            intances.append({
+                'tokens': sequence_instance,
+                'label': label,
+                META_DATA: metadata
+            })
+        return intances
+
+
+class MedNLIReader(JsonDataReader):
+
+    def __init__(self, args):
+        super().__init__()
+        self.args = args
+
+    def get_train_examples(self, data_dir, *args):
+        """See base class."""
+        return self._create_instances(
+            self._read_json(os.path.join(data_dir, "train.json")))
+
+    def get_dev_examples(self, data_dir, *args):
+        """See base class."""
+        return self._create_instances(
+            self._read_json(os.path.join(data_dir, "dev.json")))
+
+    # ADDED
+    def get_test_examples(self, data_dir, *args):
+        """See base class."""
+        return self._create_instances(
+            self._read_json(os.path.join(data_dir, "test.json")))
+
+    def get_labels(self):
+        """See base class."""
+        return ["entailment", "contradiction", "neutral"]
+
+    @property
+    def label_map(self):
+        return {label: i for i, label in enumerate(self.get_labels())}
+
+    def _create_text_instances(self, json_data):
+        examples = []
+        for json_obj in json_data:
+            guid = json_obj['pairID']
+            text_a = json_obj['sentence1']
+            text_b = json_obj['sentence2']
+            label = json_obj['gold_label']
+            examples.append(BLUEInstance(guid=guid, text_a=text_a, text_b=text_b, label=label))
+
+        return examples
+
+    def _create_instances(self, json_data):
+
+        logger.info("Reading text instances")
+        text_instances = self._create_text_instances(json_data)
+        logger.info("Convert text instances to model instances")
+        intances = []
+        for instance in tqdm(text_instances):
+            sequence_instance = BertSequenceInstance(sequence=instance.text_a, pair=instance.text_b, args=self.args)
             label = LabelInstance(self.label_map[instance.label], instance.label)
             metadata = {'guid': instance.guid}
             intances.append({
