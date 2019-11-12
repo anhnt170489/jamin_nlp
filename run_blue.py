@@ -8,7 +8,7 @@ import torch
 
 from core.common import *
 from core.meta import BertInstance
-from core.reader import BiossesReader, BC5CDRReader, DDI2013Readers, ChemProtReaders, HOCReader
+from core.reader import BiossesReader, BC5CDRReader, DDI2013Reader, ChemProtReader, HOCReader, MedNLIReader
 from core.training import Trainer
 from libs.transformers import BertTokenizer, BertConfig, RobertaConfig
 from utils import log_eval_result
@@ -28,13 +28,14 @@ ALL_MODELS = sum(
     (tuple(conf.pretrained_config_archive_map.keys()) for conf in (BertConfig, RobertaConfig)),
     ())
 
-BIOSSES, BC5CDR, HOC, DDI, CHEMPROT = 'biosses', 'bc5cdr', 'hoc', 'ddi', 'chemprot'
+BIOSSES, BC5CDR, HOC, DDI, CHEMPROT, MEDNLI = 'biosses', 'bc5cdr', 'hoc', 'ddi', 'chemprot', 'mednli'
 
 CLASS_TYPES = {BIOSSES: (BiossesReader, BertSequenceClassification, PearsonAndSpearman),
                BC5CDR: (BC5CDRReader, BertTokenClassification, AccAndF1Metrics),
                HOC: (HOCReader, BertMultilabelClassification, AccAndF1Metrics),
-               DDI: (DDI2013Readers, BertSequenceClassification, AccAndF1Metrics),
-               CHEMPROT: (ChemProtReaders, BertSequenceClassification, AccAndF1Metrics),
+               DDI: (DDI2013Reader, BertSequenceClassification, AccAndF1Metrics),
+               CHEMPROT: (ChemProtReader, BertSequenceClassification, AccAndF1Metrics),
+               MEDNLI: (MedNLIReader, BertSequenceClassification, AccAndF1Metrics)
                }
 
 
