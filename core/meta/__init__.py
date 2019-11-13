@@ -10,3 +10,6 @@ from .base_instances import SequenceInstance
 from .base_instances import SpanInstance
 from .meta import NERInstance
 from .meta import QAInstance
+from .meta import SQUADContent
+from .meta import SQUADInstance
+from .meta import SQUADResult
