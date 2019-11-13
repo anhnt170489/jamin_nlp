@@ -117,7 +117,7 @@ class AccAndF1Metrics(Metrics):
 
 class PearsonAndSpearman(Metrics):
 
-    def to_table(self, pearson_corr, spearman_corr):
+    def _to_table(self, pearson_corr, spearman_corr):
         table = BeautifulTable()
 
         table.column_headers = [
@@ -148,7 +148,7 @@ class PearsonAndSpearman(Metrics):
 
         pearson_corr = pearsonr(_preds, _golds)[0]
         spearman_corr = spearmanr(_preds, _golds)[0]
-        to_print = '\n' + str(self.to_table(pearson_corr, spearman_corr))
+        to_print = '\n' + str(self._to_table(pearson_corr, spearman_corr))
         return {
             "pearson": pearson_corr,
             "spearmanr": spearman_corr,

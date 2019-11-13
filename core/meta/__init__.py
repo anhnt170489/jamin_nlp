@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from .base_instances import BertInstance
+from .base_instances import BertQAInstance
 from .base_instances import BertSequenceInstance
 from .base_instances import BertTokenInstance
 from .base_instances import LabelInstance

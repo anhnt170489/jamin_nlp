@@ -96,8 +96,9 @@ class Evaluator(object):
                     preds.append(batch_predict)
                     golds.append(batch_golds)
 
-                    tmp_eval_loss = outputs[LOSS]
-                    eval_loss += tmp_eval_loss.mean().item()
+                    if outputs[LOSS]:
+                        tmp_eval_loss = outputs[LOSS]
+                        eval_loss += tmp_eval_loss.mean().item()
                 else:
                     preds = [] if not preds else preds
                     preds.append(outputs[PREDICT])
