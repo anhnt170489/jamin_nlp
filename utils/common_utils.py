@@ -30,7 +30,8 @@ def log_eval_result(result, outfile=None):
                 writer.write(result[PRINT] + '\n')
             else:
                 for key in sorted(result.keys()):
-                    writer.write("  %s = %s\n", key, str(result[key]))
+                    if key != BEST_STEP:
+                        writer.write("  %s = %s\n" % (key, str(result[key])))
             writer.write('\n')
 
 
