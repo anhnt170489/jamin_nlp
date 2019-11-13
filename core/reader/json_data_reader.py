@@ -30,11 +30,18 @@ class JsonDataReader(object):
         """Reads a json-based file."""
         import json
 
-        with open(json_file) as json_file:
-            json_lines = [json_line for json_line in json_file]
-        try:
-            json_data = json.load(json_lines)
-        except:
-            json_data = [json.loads(json_line) for json_line in json_lines]
+        with open(json_file, "r", encoding='utf-8') as json_file:
+            try:
+                json_data = [json.load(json_file)]
+            except:
+                json_data = None
+
+        if not json_data:
+            with open(json_file, "r", encoding='utf-8') as json_file:
+                try:
+                    json_data = [json.loads(json_line) for json_line in json_file]
+                except:
+                    import traceback
+                    traceback.print_exc()
 
         return json_data

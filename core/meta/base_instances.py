@@ -3,6 +3,7 @@ from typing import List
 
 import torch
 
+from core.common import *
 from libs.transformers import BertConfig, BertTokenizer, BertModel, \
     RobertaConfig, RobertaTokenizer, RobertaModel
 
@@ -300,9 +301,111 @@ class BertSequenceInstance(BertInstance):
 class BertQAInstance(BertInstance):
     """Bert instance for QA task, a special instance of Bert Instance"""
 
-    def __init__(self, args, query_tokens, doc_tokens):
+    def __init__(self, args, doc_text='', query_text='', doc_tokens=None, query_tokens=None):
         super().__init__(args)
         self.tokenizer = BertQAInstance.get_bert()['tokenizer']
         self.model = BertQAInstance.get_bert()['model']
         self.query_tokens = query_tokens
         self.doc_tokens = doc_tokens
+
+        cls_token_at_end = bool(args.model_type in ['xlnet'])
+        pad_on_left = bool(args.model_type in ['xlnet'])
+        cls_token = '[CLS]'
+        sep_token = '[SEP]'
+        sequence_a_is_doc = True if args.model_type in ['xlnet'] else False
+
+        self.configs = defaultdict()
+        self.configs['model_config'] = BertQAInstance.get_bert()['model_config']
+        self.configs['max_seq_length'] = args.max_seq_length
+        self.configs['max_query_length'] = args.max_query_length
+        self.configs['cls_token_at_end'] = cls_token_at_end
+        self.configs['pad_on_left'] = pad_on_left
+        self.configs['cls_token'] = cls_token
+        self.configs['sep_token'] = sep_token
+        self.configs['sequence_a_is_doc'] = sequence_a_is_doc
+        # reservation
+        self.configs['mask_padding_with_zero'] = True
+        self.configs['pad_token'] = 0
+
+        if not query_tokens:
+            query_tokens = self.tokenizer.tokenize(query_text)
+        if not doc_tokens:
+            doc_tokens = self.tokenizer.tokenize(doc_text)
+
+        if len(query_tokens) > self.configs['max_query_length']:
+            query_tokens = query_tokens[0:self.configs['max_query_length']]
+
+        tokens = []
+        # p_mask: mask with 1 for token than cannot be in the answer (0 for token which can be in an answer)
+        # Original TF implem also keep the classification token (set to 0) (not sure why...)
+        p_mask = []
+
+        # CLS token at the beginning
+        if not self.configs['cls_token_at_end']:
+            tokens.append(self.configs['cls_token'])
+            p_mask.append(P_MASK_A)
+            cls_index = 0
+
+        # XLNet: P SEP Q SEP CLS
+        # Others: CLS Q SEP P SEP
+        if not self.configs['sequence_a_is_doc']:
+            # Query
+            tokens += query_tokens
+            p_mask += [P_MASK_Q] * len(query_tokens)
+
+            # SEP token
+            tokens.append(self.configs['sep_token'])
+            p_mask.append(P_MASK_Q)
+
+        # Add doc tokens
+        for token in doc_tokens:
+            tokens.append(token)
+            p_mask.append(P_MASK_A)
+
+        if self.configs['sequence_a_is_doc']:
+            # SEP token
+            tokens.append(self.configs['sep_token'])
+            p_mask.append(P_MASK_Q)
+
+            tokens += query_tokens
+            p_mask += [P_MASK_Q] * len(query_tokens)
+
+        # SEP token
+        tokens.append(self.configs['sep_token'])
+        p_mask.append(P_MASK_Q)
+
+        # CLS token at the end
+        if self.configs['cls_token_at_end']:
+            tokens.append(self.configs['cls_token_at_end'])
+            p_mask.append(P_MASK_A)
+            cls_index = len(tokens) - 1  # Index of classification token
+
+        self.input_ids = self.tokenizer.convert_tokens_to_ids(tokens)
+
+        # The mask has 1 for real tokens and 0 for padding tokens. Only real
+        # tokens are attended to.
+        self.input_mask = [1 if self.configs['mask_padding_with_zero'] else 0] * len(self.input_ids)
+
+        self.p_mask = p_mask
+        self.cls_index = cls_index
+        self.tokens = tokens
+
+    def pad(self, padding_length):
+
+        # Zero-pad up to the sequence length.
+        while len(self.input_ids) < padding_length:
+            self.input_ids.append(self.configs['pad_token'])
+            self.input_mask.append(0 if self.configs['mask_padding_with_zero'] else 1)
+            self.p_mask.append(P_MASK_Q)
+
+        assert len(self.input_ids) == padding_length
+        assert len(self.input_mask) == padding_length
+
+        return self
+
+    def to_tensors(self):
+        return (torch.tensor(self.input_ids, dtype=torch.long), torch.tensor(self.input_mask, dtype=torch.long),
+                torch.tensor(self.p_mask, dtype=torch.long))
+
+    def __len__(self):
+        return len(self.input_ids)
