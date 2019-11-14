@@ -282,6 +282,7 @@ class SQUADReader(JsonDataReader):
                                                                 split_token_index)
                     token_is_max_context[len_tokens] = is_max_context
                     doc_tokens.append(all_doc_tokens[split_token_index])
+                    len_tokens += 1
 
                 paragraph_len = doc_span.length
 

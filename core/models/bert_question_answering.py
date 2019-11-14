@@ -39,7 +39,9 @@ class BertQuestionAnswering(BertPreTrainedModel):
         unique_ids = [meta_data.unique_id for meta_data in batch[META_DATA]]
         golds = [meta_data for meta_data in batch[META_DATA]]
 
-        outputs = self._bert(tokens[BERT_INPUT_IDS], attention_mask=tokens[BERT_INPUT_MASKS])
+        outputs = self._bert(tokens[BERT_INPUT_IDS],
+                             attention_mask=tokens[BERT_INPUT_MASKS],
+                             token_type_ids=tokens[BERT_SEGMENT_IDS])
         sequence_output = outputs[0]
 
         logits = self.qa_outputs(sequence_output)
