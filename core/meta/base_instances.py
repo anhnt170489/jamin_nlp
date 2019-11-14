@@ -308,6 +308,11 @@ class BertQAInstance(BertInstance):
         self.query_tokens = query_tokens
         self.doc_tokens = doc_tokens
 
+        query_segment_id = Q_MASK
+        answer_segment_id = A_MASK
+        cls_token_segment_id = 2 if args.model_type in ['xlnet'] else 0
+        pad_token_segment_id = 3 if args.model_type in ['xlnet'] else 0
+
         cls_token_at_end = bool(args.model_type in ['xlnet'])
         pad_on_left = bool(args.model_type in ['xlnet'])
         cls_token = '[CLS]'
@@ -323,6 +328,10 @@ class BertQAInstance(BertInstance):
         self.configs['cls_token'] = cls_token
         self.configs['sep_token'] = sep_token
         self.configs['sequence_a_is_doc'] = sequence_a_is_doc
+        self.configs['query_segment_id'] = query_segment_id
+        self.configs['answer_segment_id'] = answer_segment_id
+        self.configs['cls_token_segment_id'] = cls_token_segment_id
+        self.configs['pad_token_segment_id'] = pad_token_segment_id
         # reservation
         self.configs['mask_padding_with_zero'] = True
         self.configs['pad_token'] = 0
@@ -339,11 +348,13 @@ class BertQAInstance(BertInstance):
         # p_mask: mask with 1 for token than cannot be in the answer (0 for token which can be in an answer)
         # Original TF implem also keep the classification token (set to 0) (not sure why...)
         p_mask = []
+        segment_ids = []
 
         # CLS token at the beginning
         if not self.configs['cls_token_at_end']:
             tokens.append(self.configs['cls_token'])
-            p_mask.append(P_MASK_A)
+            segment_ids.append(self.configs['cls_token_segment_id'])
+            p_mask.append(A_MASK)
             cls_index = 0
 
         # XLNet: P SEP Q SEP CLS
@@ -351,33 +362,40 @@ class BertQAInstance(BertInstance):
         if not self.configs['sequence_a_is_doc']:
             # Query
             tokens += query_tokens
-            p_mask += [P_MASK_Q] * len(query_tokens)
+            segment_ids += [self.configs['query_segment_id']] * len(query_tokens)
+            p_mask += [Q_MASK] * len(query_tokens)
 
             # SEP token
             tokens.append(self.configs['sep_token'])
-            p_mask.append(P_MASK_Q)
+            segment_ids.append(self.configs['query_segment_id'])
+            p_mask.append(Q_MASK)
 
         # Add doc tokens
         for token in doc_tokens:
             tokens.append(token)
-            p_mask.append(P_MASK_A)
+            segment_ids.append(self.configs['answer_segment_id'])
+            p_mask.append(A_MASK)
 
         if self.configs['sequence_a_is_doc']:
             # SEP token
             tokens.append(self.configs['sep_token'])
-            p_mask.append(P_MASK_Q)
+            segment_ids.append(self.configs['query_segment_id'])
+            p_mask.append(Q_MASK)
 
             tokens += query_tokens
-            p_mask += [P_MASK_Q] * len(query_tokens)
+            segment_ids += [self.configs['query_segment_id']] * len(query_tokens)
+            p_mask += [Q_MASK] * len(query_tokens)
 
         # SEP token
         tokens.append(self.configs['sep_token'])
-        p_mask.append(P_MASK_Q)
+        segment_ids.append(self.configs['query_segment_id'])
+        p_mask.append(Q_MASK)
 
         # CLS token at the end
         if self.configs['cls_token_at_end']:
             tokens.append(self.configs['cls_token_at_end'])
-            p_mask.append(P_MASK_A)
+            segment_ids.append(self.configs['answer_segment_id'])
+            p_mask.append(A_MASK)
             cls_index = len(tokens) - 1  # Index of classification token
 
         self.input_ids = self.tokenizer.convert_tokens_to_ids(tokens)
@@ -389,6 +407,7 @@ class BertQAInstance(BertInstance):
         self.p_mask = p_mask
         self.cls_index = cls_index
         self.tokens = tokens
+        self.segment_ids = segment_ids
 
     def pad(self, padding_length):
 
@@ -396,16 +415,18 @@ class BertQAInstance(BertInstance):
         while len(self.input_ids) < padding_length:
             self.input_ids.append(self.configs['pad_token'])
             self.input_mask.append(0 if self.configs['mask_padding_with_zero'] else 1)
-            self.p_mask.append(P_MASK_Q)
+            self.segment_ids.append(self.configs['pad_token_segment_id'])
+            self.p_mask.append(Q_MASK)
 
         assert len(self.input_ids) == padding_length
         assert len(self.input_mask) == padding_length
+        assert len(self.segment_ids) == padding_length
 
         return self
 
     def to_tensors(self):
         return (torch.tensor(self.input_ids, dtype=torch.long), torch.tensor(self.input_mask, dtype=torch.long),
-                torch.tensor(self.p_mask, dtype=torch.long))
+                torch.tensor(self.p_mask, dtype=torch.long), torch.tensor(self.segment_ids, dtype=torch.long))
 
     def __len__(self):
         return len(self.input_ids)
