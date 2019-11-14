@@ -35,6 +35,8 @@ class InstanceProcessor(object):
                             elif isinstance(instances[0], BertQAInstance):
                                 batch[k][BERT_P_MASKS] = torch.stack(
                                     [instance.to_tensors()[2] for instance in instances], dim=0).to(device)
+                                batch[k][BERT_SEGMENT_IDS] = torch.stack(
+                                    [instance.to_tensors()[3] for instance in instances], dim=0).to(device)
 
                     else:
                         batch[k] = torch.stack([instance.to_tensor() for instance in instances], dim=0).to(device)
