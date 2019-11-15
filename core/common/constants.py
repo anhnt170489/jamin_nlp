@@ -13,6 +13,7 @@ STEP = 'eval_step'
 BERT_INPUT_IDS = 'bert_input_ids'
 BERT_INPUT_MASKS = 'bert_input_masks'
 BERT_TOKEN_LABELS = 'bert_token_labels'
+BERT_TOKEN_MASKS = 'bert_token_masks'
 BERT_P_MASKS = 'bert_p_masks'
 BERT_SEGMENT_IDS = 'bert_segment_ids'
 
