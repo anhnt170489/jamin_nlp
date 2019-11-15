@@ -44,3 +44,13 @@ def read_lines(filename, encoding="UTF-8"):
     with open(filename, "r", encoding=encoding) as f:
         for line in f:
             yield line.rstrip("\r\n\v")
+
+
+def dump_json(data, ensure_ascii=False, indent=2):
+    import json
+    return json.dumps(data, ensure_ascii=ensure_ascii, indent=indent)
+
+
+def collate(batch):
+    from core.meta import JaminBatch
+    return JaminBatch(batch)

@@ -8,5 +8,7 @@ from .base_instances import ListInstance
 from .base_instances import MultiLabelInstance
 from .base_instances import SequenceInstance
 from .base_instances import SpanInstance
+from .dataset import JaminBatch
+from .dataset import JaminDataset
 from .meta import NERInstance
 from .meta import QAInstance
