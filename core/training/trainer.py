@@ -5,16 +5,16 @@ import torch
 from torch.utils.data import (
     DataLoader,
     RandomSampler,
-    TensorDataset,
 )
 from tqdm import tqdm, trange
 
 from core.common import *
 from core.eval import Evaluator
-from core.processor import InstanceProcessor
+from core.meta import JaminDataset
 from libs.opt import Lamb, RAdam, Ranger
 from libs.transformers import AdamW, WarmupLinearSchedule
-from utils import log_eval_result, save_model
+from utils import collate
+from utils import log_eval_result, handle_checkpoints
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +48,12 @@ class Trainer(object):
         new_logging_loss = curr_loss
 
         if do_save_model:
-            save_model(args, model, global_step)
+            handle_checkpoints(model=model,
+                               checkpoint_dir=args.output_dir,
+                               params={
+                                   "filename": "checkpoint",
+                                   "global_step": global_step},
+                               num_saved=1)
 
         return new_best_score, new_logging_loss
 
@@ -60,12 +65,13 @@ class Trainer(object):
                             datefmt='%m/%d/%Y %H:%M:%S',
                             level=logging.INFO if args.local_rank in [-1, 0] else logging.WARN)
 
-        data_ids = TensorDataset(torch.arange(len(train_instances)))
-        sampler = RandomSampler(data_ids)
+        train_data = JaminDataset(data=train_instances, device=args.device)
+        sampler = RandomSampler(train_data)
         batch_size = args.per_gpu_train_batch_size * max(1, args.n_gpu)
         args.train_batch_size = batch_size
         iterator = trange(int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0])
-        data_loader = DataLoader(data_ids, sampler=sampler, batch_size=batch_size)
+        data_loader = DataLoader(dataset=train_data, sampler=sampler, batch_size=batch_size, collate_fn=collate,
+                                 pin_memory=True)
 
         if args.max_steps > 0:
             t_total = args.max_steps
@@ -103,7 +109,7 @@ class Trainer(object):
             model, optimizer = amp.initialize(model, optimizer, opt_level=args.fp16_opt_level)
 
         logger.info("***** Running training *****")
-        logger.info("  Num examples = %d", len(data_ids))
+        logger.info("  Num examples = %d", len(train_data))
         logger.info("  Num Epochs = %d", args.num_train_epochs)
         logger.info("  Instantaneous batch size per GPU = %d", args.per_gpu_train_batch_size)
         logger.info("  Total train batch size (w. parallel, distributed & accumulation) = %d",
@@ -129,15 +135,10 @@ class Trainer(object):
 
         for _ in iterator:
             epoch_iterator = tqdm(data_loader, desc="Iteration", disable=args.local_rank not in [-1, 0])
-            for step, data_ids in enumerate(epoch_iterator):
+            for step, batch in enumerate(epoch_iterator):
                 model.train()
-                batch = [
-                    train_instances[id]
-                    for id in data_ids[0].tolist()
-                ]
-                batch = InstanceProcessor.pad_and_to_device(batch, args.device)
 
-                outputs = model(batch)
+                outputs = model(batch.data)
 
                 loss = outputs[LOSS]
 
@@ -156,10 +157,6 @@ class Trainer(object):
 
                 tr_loss += loss.item()
                 if (step + 1) % args.gradient_accumulation_steps == 0:
-                    if args.fp16:
-                        torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), args.max_grad_norm)
-                    else:
-                        torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
                     optimizer.step()
                     if optimizer_type not in [RADAM, RANGER]:
                         scheduler.step()  # Update learning rate schedule

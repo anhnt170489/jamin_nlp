@@ -4,8 +4,7 @@ from typing import List
 import torch
 
 from core.common import *
-from libs.transformers import BertConfig, BertTokenizer, BertModel, \
-    RobertaConfig, RobertaTokenizer, RobertaModel
+from libs.transformers import BertTokenizer, RobertaTokenizer
 
 
 class TensorInstance(object):
@@ -47,7 +46,10 @@ class LabelInstance(TensorInstance):
         self.label_text = label_text
 
     def to_tensor(self):
-        tensor = torch.tensor(self.label_id, dtype=torch.long)
+        if isinstance(self.label_id, float):
+            tensor = torch.tensor(self.label_id, dtype=torch.float)
+        else:
+            tensor = torch.tensor(self.label_id, dtype=torch.long)
         return tensor
 
     @property
@@ -124,30 +126,25 @@ class ListInstance(TensorInstance, SequenceInstance):
 class BertInstance(SequenceInstance):
     """Bert instance, including Bert,Roberta, based on huggingface's Transformer"""
 
-    MODEL_CLASSES = {
-        'bert': (BertConfig, BertTokenizer, BertModel),
-        'roberta': (RobertaConfig, RobertaTokenizer, RobertaModel)
+    TOKENIZER_CLASSES = {
+        'bert': BertTokenizer,
+        'roberta': RobertaTokenizer
     }
 
-    __bert = None
+    __tokenizer = None
 
     @staticmethod
-    def get_bert(args=None):
-        if not BertInstance.__bert:
-            config_class, tokenizer_class, model_class = BertInstance.MODEL_CLASSES[args.model_type]
-            config = config_class.from_pretrained(args.config_name if args.config_name else args.model_name_or_path)
-            tokenizer = tokenizer_class.from_pretrained(
+    def get_tokenizer(args=None):
+        if not BertInstance.__tokenizer:
+            tokenizer_class = BertInstance.TOKENIZER_CLASSES[args.model_type]
+            BertInstance.__tokenizer = tokenizer_class.from_pretrained(
                 args.tokenizer_name if args.tokenizer_name else args.model_name_or_path,
                 do_lower_case=args.do_lower_case)
-            model = model_class.from_pretrained(args.model_name_or_path,
-                                                from_tf=bool('.ckpt' in args.model_name_or_path),
-                                                config=config)
-            BertInstance.__bert = {'tokenizer': tokenizer, 'model': model, 'model_config': config}
-        return BertInstance.__bert
+        return BertInstance.__tokenizer
 
     def __init__(self, args):
-        if not BertInstance.__bert:
-            BertInstance.get_bert(args)
+        if not BertInstance.__tokenizer:
+            BertInstance.get_tokenizer(args)
 
     def pad(self, padding_length):
         raise NotImplementedError()
@@ -161,8 +158,7 @@ class BertTokenInstance(BertInstance):
 
     def __init__(self, args, tokens, token_labels=None):
         super().__init__(args)
-        self.tokenizer = BertTokenInstance.get_bert()['tokenizer']
-        self.model = BertTokenInstance.get_bert()['model']
+        self.tokenizer = BertTokenInstance.get_tokenizer()
         self.tokens = tokens
 
         if token_labels:
@@ -173,7 +169,6 @@ class BertTokenInstance(BertInstance):
         pad_on_left = bool(args.model_type in ['xlnet'])
 
         self.configs = defaultdict()
-        self.configs['model_config'] = BertTokenInstance.get_bert()['model_config']
         self.configs['max_seq_length'] = args.max_seq_length
         self.configs['cls_token_at_end'] = cls_token_at_end
         self.configs['pad_on_left'] = pad_on_left
@@ -197,9 +192,11 @@ class BertTokenInstance(BertInstance):
             subword_tokens = subword_tokens[:(self.configs['max_seq_length'] - special_tokens_count)]
             if token_labels:
                 token_labels = token_labels[:(self.configs['max_seq_length'] - special_tokens_count)]
+        token_masks = [1] * len(subword_tokens)
 
         sep_token = self.tokenizer.sep_token
         subword_tokens = subword_tokens + [sep_token]
+        token_masks = token_masks + [0]
         if token_labels:
             token_labels = token_labels + [-1]
 
@@ -207,10 +204,12 @@ class BertTokenInstance(BertInstance):
 
         if self.configs['cls_token_at_end']:
             subword_tokens = subword_tokens + [cls_token]
+            token_masks = token_masks + [0]
             if token_labels:
                 token_labels = token_labels + [-1]
         else:
             subword_tokens = [cls_token] + subword_tokens
+            token_masks = [0] + token_masks
             if token_labels:
                 token_labels = [-1] + token_labels
 
@@ -219,6 +218,7 @@ class BertTokenInstance(BertInstance):
         # tokens are attended to.
         self.input_mask = [1 if self.configs['mask_padding_with_zero'] else 0] * len(self.input_ids)
         self.token_labels = token_labels
+        self.token_masks = token_masks
 
     def pad(self, padding_length):
         length_to_pad = padding_length - len(self)
@@ -228,23 +228,28 @@ class BertTokenInstance(BertInstance):
             self.input_mask = ([0 if self.configs['mask_padding_with_zero'] else 1] * length_to_pad) + self.input_mask
             if self.token_labels:
                 self.token_labels = ([-1] * length_to_pad) + self.token_labels
+            self.token_masks = ([0] * length_to_pad) + self.token_masks
 
         else:
             self.input_ids = self.input_ids + ([pad_token] * length_to_pad)
             self.input_mask = self.input_mask + ([0 if self.configs['mask_padding_with_zero'] else 1] * length_to_pad)
             if self.token_labels:
                 self.token_labels = self.token_labels + ([-1] * length_to_pad)
+            self.token_masks = self.token_masks + ([0] * length_to_pad)
 
         assert len(self.input_ids) == padding_length
         assert len(self.input_mask) == padding_length
         if self.token_labels:
             assert len(self.token_labels) == padding_length
+        assert len(self.token_masks) == padding_length
 
         return self
 
     def to_tensors(self):
-        return (torch.tensor(self.input_ids, dtype=torch.long), torch.tensor(self.input_mask, dtype=torch.long),
-                torch.tensor(self.token_labels, dtype=torch.long) if self.token_labels else None)
+        return (torch.tensor(self.input_ids, dtype=torch.long),
+                torch.tensor(self.input_mask, dtype=torch.long),
+                torch.tensor(self.token_labels, dtype=torch.long) if self.token_labels else None,
+                torch.tensor(self.token_masks, dtype=torch.long))
 
     def __len__(self):
         return len(self.input_ids)
@@ -255,12 +260,12 @@ class BertSequenceInstance(BertInstance):
 
     def __init__(self, args, sequence, pair=None):
         super().__init__(args)
-        self.tokenizer = BertSequenceInstance.get_bert()['tokenizer']
-        self.model = BertSequenceInstance.get_bert()['model']
+        self.tokenizer = BertSequenceInstance.get_tokenizer()
         self.configs = defaultdict()
-        self.configs['model_config'] = BertSequenceInstance.get_bert()['model_config']
         self.configs['max_seq_length'] = args.max_seq_length
         pad_on_left = bool(args.model_type in ['xlnet'])
+        pad_token_segment_id = 4 if args.model_type in ['xlnet'] else 0
+        self.configs['pad_token_segment_id'] = pad_token_segment_id
         self.configs['pad_on_left'] = pad_on_left
 
         # reservation
@@ -272,6 +277,10 @@ class BertSequenceInstance(BertInstance):
             max_length=self.configs['max_seq_length'],
         )
         self.input_ids = inputs["input_ids"]
+        if args.ignore_segment_ids:
+            self.segment_ids = [0] * len(self.input_ids)
+        else:
+            self.segment_ids = inputs["token_type_ids"]
         # The mask has 1 for real tokens and 0 for padding tokens. Only real
         # tokens are attended to.
         self.input_mask = [1 if self.configs['mask_padding_with_zero'] else 0] * len(self.input_ids)
@@ -282,17 +291,22 @@ class BertSequenceInstance(BertInstance):
         if self.configs['pad_on_left']:
             self.input_ids = ([pad_token] * length_to_pad) + self.input_ids
             self.input_mask = ([0 if self.configs['mask_padding_with_zero'] else 1] * length_to_pad) + self.input_mask
+            self.segment_ids = ([self.configs['pad_token_segment_id']] * length_to_pad) + self.segment_ids
         else:
             self.input_ids = self.input_ids + ([pad_token] * length_to_pad)
             self.input_mask = self.input_mask + ([0 if self.configs['mask_padding_with_zero'] else 1] * length_to_pad)
+            self.segment_ids = self.segment_ids + ([self.configs['pad_token_segment_id']] * length_to_pad)
 
         assert len(self.input_ids) == padding_length
         assert len(self.input_mask) == padding_length
+        assert len(self.segment_ids) == padding_length
 
         return self
 
     def to_tensors(self):
-        return (torch.tensor(self.input_ids, dtype=torch.long), torch.tensor(self.input_mask, dtype=torch.long))
+        return (torch.tensor(self.input_ids, dtype=torch.long),
+                torch.tensor(self.input_mask, dtype=torch.long),
+                torch.tensor(self.segment_ids, dtype=torch.long),)
 
     def __len__(self):
         return len(self.input_ids)
@@ -303,8 +317,7 @@ class BertQAInstance(BertInstance):
 
     def __init__(self, args, doc_text='', query_text='', doc_tokens=None, query_tokens=None):
         super().__init__(args)
-        self.tokenizer = BertQAInstance.get_bert()['tokenizer']
-        self.model = BertQAInstance.get_bert()['model']
+        self.tokenizer = BertQAInstance.get_tokenizer()
         self.query_tokens = query_tokens
         self.doc_tokens = doc_tokens
 
@@ -320,7 +333,6 @@ class BertQAInstance(BertInstance):
         sequence_a_is_doc = True if args.model_type in ['xlnet'] else False
 
         self.configs = defaultdict()
-        self.configs['model_config'] = BertQAInstance.get_bert()['model_config']
         self.configs['max_seq_length'] = args.max_seq_length
         self.configs['max_query_length'] = args.max_query_length
         self.configs['cls_token_at_end'] = cls_token_at_end

@@ -4,12 +4,12 @@ import torch
 from torch.utils.data import (
     DataLoader,
     SequentialSampler,
-    TensorDataset,
 )
 from tqdm import tqdm
 
 from core.common import *
-from core.processor import InstanceProcessor
+from core.meta import JaminDataset
+from utils import collate
 
 logger = logging.getLogger(__name__)
 
@@ -33,12 +33,12 @@ class Evaluator(object):
                             datefmt='%m/%d/%Y %H:%M:%S',
                             level=logging.INFO if args.local_rank in [-1, 0] else logging.WARN)
 
-        data_ids = TensorDataset(torch.arange(len(instances)))
-
-        sampler = SequentialSampler(data_ids)
+        eval_data = JaminDataset(data=instances, device=args.device)
+        sampler = SequentialSampler(eval_data)
         batch_size = args.per_gpu_eval_batch_size * max(1, args.n_gpu)
         args.eval_batch_size = batch_size
-        data_loader = DataLoader(data_ids, sampler=sampler, batch_size=batch_size)
+        data_loader = DataLoader(dataset=eval_data, sampler=sampler, batch_size=batch_size, collate_fn=collate,
+                                 pin_memory=True)
 
         if predict:
             if args.fp16:
@@ -61,7 +61,7 @@ class Evaluator(object):
                                                                   find_unused_parameters=True)
 
         logger.info("***** Running evaluating *****")
-        logger.info("  Num examples = %d", len(data_ids))
+        logger.info("  Num examples = %d", len(eval_data))
         logger.info("  Batch size = %d", args.eval_batch_size)
         eval_loss = 0.0
         nb_eval_steps = 0
@@ -71,18 +71,13 @@ class Evaluator(object):
         preds = []
         golds = []
 
-        for step, data_ids in enumerate(
+        for step, batch in enumerate(
                 tqdm(data_loader, desc="Iteration", disable=args.local_rank not in [-1, 0])
         ):
             model.eval()
             with torch.no_grad():
-                batch = [
-                    instances[id]
-                    for id in data_ids[0].tolist()
-                ]
-                batch = InstanceProcessor.pad_and_to_device(batch, args.device)
 
-                outputs = model(batch)
+                outputs = model(batch.data)
 
                 if args.ignored_labels:
                     batch_predict, batch_golds = Evaluator.remove_ignore_labels(outputs[PREDICT], outputs[GOLD],

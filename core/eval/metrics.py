@@ -99,8 +99,8 @@ class AccAndF1Metrics(Metrics):
                 _preds = batch_predicts
                 _golds = batch_golds
             else:
-                _preds = np.append(batch_predicts, preds, axis=0)
-                _golds = np.append(batch_golds, golds, axis=0)
+                _preds = np.append(batch_predicts, _preds, axis=0)
+                _golds = np.append(batch_golds, _golds, axis=0)
 
         acc = AccAndF1Metrics.simple_accuracy(_preds, _golds)
         f1 = f1_score(y_true=_golds, y_pred=_preds, average='micro')
@@ -143,8 +143,8 @@ class PearsonAndSpearman(Metrics):
                 _preds = batch_predicts
                 _golds = batch_golds
             else:
-                _preds = np.append(batch_predicts, preds, axis=0)
-                _golds = np.append(batch_golds, golds, axis=0)
+                _preds = np.append(batch_predicts, _preds, axis=0)
+                _golds = np.append(batch_golds, _golds, axis=0)
 
         pearson_corr = pearsonr(_preds, _golds)[0]
         spearman_corr = spearmanr(_preds, _golds)[0]
