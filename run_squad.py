@@ -8,7 +8,7 @@ import torch
 
 from core.common import *
 from core.eval import SQUADMetrics, SQUADPredictWriter
-from core.meta import BertInstance, SQUADResult
+from core.meta import SQUADResult
 from core.models import BertQuestionAnswering
 from core.reader import SQUADReader
 from core.training import Trainer
@@ -121,7 +121,7 @@ def main():
 
     ## Model specific parameters
     parser.add_argument("--model_type", default=None, type=str, required=True,
-                        help="Model type selected in the list: " + ", ".join(BertInstance.MODEL_CLASSES.keys()))
+                        help="Model type selected in the list: bert,roberta")
     parser.add_argument("--model_name_or_path", default=None, type=str, required=True,
                         help="Path to pre-trained model or shortcut name selected in the list: " + ", ".join(
                             ALL_MODELS))
@@ -240,8 +240,7 @@ def main():
                 cache_data(test_instances, type='TEST', cache_dir=data_dir)
 
     logger.info("Preparing the model")
-    bert_config = BertInstance.get_bert(args)['model_config']
-    model = BertQuestionAnswering(bert_config, args)
+    model = BertQuestionAnswering(args)
     if args.local_rank == 0:
         torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
 

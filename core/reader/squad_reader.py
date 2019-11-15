@@ -203,7 +203,7 @@ class SQUADReader(JsonDataReader):
         # cnt_pos, cnt_neg = 0, 0
         # max_N, max_M = 1024, 1024
         # f = np.zeros((max_N, max_M), dtype=np.float32)
-        tokenizer = BertInstance.get_bert(args=self.args)['tokenizer']
+        tokenizer = BertInstance.get_tokenizer(args=self.args)
 
         intances = []
 
