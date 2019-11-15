@@ -7,7 +7,6 @@ import numpy as np
 import torch
 
 from core.common import *
-from core.meta import BertInstance
 from core.reader import BiossesReader, BC5CDRReader, DDI2013Reader, ChemProtReader, HOCReader, MedNLIReader
 from core.training import Trainer
 from libs.transformers import BertTokenizer, BertConfig, RobertaConfig
@@ -131,7 +130,7 @@ def main():
 
     ## Model specific parameters
     parser.add_argument("--model_type", default=None, type=str, required=True,
-                        help="Model type selected in the list: " + ", ".join(BertInstance.MODEL_CLASSES.keys()))
+                        help="Model type selected in the list: bert, roberta")
     parser.add_argument("--model_name_or_path", default=None, type=str, required=True,
                         help="Path to pre-trained model or shortcut name selected in the list: " + ", ".join(
                             ALL_MODELS))
@@ -142,6 +141,8 @@ def main():
     parser.add_argument("--max_seq_length", default=128, type=int,
                         help="The maximum total input sequence length after tokenization. Sequences longer "
                              "than this will be truncated, sequences shorter will be padded.")
+    parser.add_argument("--ignore_segment_ids", action='store_true',
+                        help="Set this flag if you are using BERT models trained without task 2.")
 
     parser.add_argument("--do_lower_case", action='store_true',
                         help="Set this flag if you are using an uncased model.")
@@ -256,8 +257,7 @@ def main():
         args.mlb = mlb
 
     logger.info("Preparing the model")
-    bert_config = BertInstance.get_bert(args)['model_config']
-    model = model_class(bert_config, args)
+    model = model_class(args)
     if args.local_rank == 0:
         torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
 

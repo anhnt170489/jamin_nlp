@@ -43,7 +43,8 @@ class BiossesReader(BLUEReader):
 
     def get_labels(self):
         """See base class."""
-        return ["0", "1", "2", "3", "4"]
+        # return ["0", "1", "2", "3", "4"]
+        return ["Regression"]
 
     @property
     def label_map(self):
@@ -58,7 +59,8 @@ class BiossesReader(BLUEReader):
             guid = "%s-%s" % (set_type, line[0])
             text_a = line[-3]
             text_b = line[-2]
-            label = str(round(float(line[-1])))
+            # label = str(round(float(line[-1])))
+            label = float(line[-1])
             examples.append(BLUEInstance(guid=guid, text_a=text_a, text_b=text_b, label=label))
         return examples
 
@@ -70,7 +72,8 @@ class BiossesReader(BLUEReader):
         intances = []
         for instance in tqdm(text_instances):
             sequence_instance = BertSequenceInstance(sequence=instance.text_a, pair=instance.text_b, args=self.args)
-            label = LabelInstance(self.label_map[instance.label], instance.label)
+            # label = LabelInstance(self.label_map[instance.label], instance.label)
+            label = LabelInstance(instance.label, '')
             metadata = {'guid': instance.guid}
             intances.append({
                 'tokens': sequence_instance,

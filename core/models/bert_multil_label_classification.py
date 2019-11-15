@@ -1,76 +1,82 @@
 import torch
 import torch.nn as nn
-from torch.nn import BCEWithLogitsLoss
 
-from core.common import LOSS, PREDICT, GOLD, OUTPUT
-from core.meta import BertInstance
-from libs.transformers import BertPreTrainedModel
+from core.common import *
+from libs.transformers import BertConfig
+from libs.transformers.modeling_bert import BertForMultiLabelClassification
 
 
-class BertMultilabelClassification(BertPreTrainedModel):
+class BertMultilabelClassification(nn.Module):
     def __init__(
-            self, bert_config, args
+            self, args
     ) -> None:
-        super(BertMultilabelClassification, self).__init__(bert_config)
+        super(BertMultilabelClassification, self).__init__()
 
         self._label_map = {i: label for i, label in enumerate(args.labels)}
         self._num_labels = len(args.labels)
 
-        self._bert = BertInstance.get_bert(args)['model']
-        self._dropout = nn.Dropout(bert_config.hidden_dropout_prob)
-
-        self._classifier = nn.Linear(bert_config.hidden_size, self._num_labels)
+        config = BertConfig.from_pretrained(args.config_name if args.config_name else args.model_name_or_path,
+                                            num_labels=self._num_labels)
+        self._bert_for_multi_label_classification = BertForMultiLabelClassification.from_pretrained(
+            args.model_name_or_path,
+            from_tf=bool(
+                '.ckpt' in args.model_name_or_path),
+            config=config)
         self._mlb = args.mlb
-
-        self.init_weights()
 
     @staticmethod
     def flatten_labels(preds, label_ids):
         flat_preds = []
         flat_label_ids = []
-        for pred_t, label_id_t in zip(preds, label_ids):
-            if len(pred_t) > 0 or len(label_id_t) > 0:
-                for pred in pred_t:
-                    flat_preds.append(pred)
-                    if pred in label_id_t:
-                        flat_label_ids.append(pred)
-                    else:
-                        flat_label_ids.append(0)
+        if label_ids is not None:
+            for pred_t, label_id_t in zip(preds, label_ids):
+                if len(pred_t) > 0 or len(label_id_t) > 0:
+                    for pred in pred_t:
+                        flat_preds.append(pred)
+                        if pred in label_id_t:
+                            flat_label_ids.append(pred)
+                        else:
+                            flat_label_ids.append(0)
 
-                for label_id in label_id_t:
-                    if label_id not in pred_t:
-                        flat_label_ids.append(label_id)
-                        flat_preds.append(0)
-            else:
-                flat_preds.append(0)
-                flat_label_ids.append(0)
+                    for label_id in label_id_t:
+                        if label_id not in pred_t:
+                            flat_label_ids.append(label_id)
+                            flat_preds.append(0)
+                else:
+                    flat_preds.append(0)
+                    flat_label_ids.append(0)
+        else:
+            for pred_t in preds:
+                if len(pred_t) > 0:
+                    flat_preds.append(pred_t)
+                else:
+                    flat_preds.append([0])
 
         return flat_preds, flat_label_ids
 
     def forward(self, batch):
         tokens = batch['tokens']
-        labels = batch['label']
+        labels = batch['label'] if 'label' in batch else None
 
-        outputs = self._bert(tokens['input_ids'], attention_mask=tokens['input_mask'])
-        sequence_output = outputs[1]
+        outputs = self._bert_for_multi_label_classification(tokens[BERT_INPUT_IDS],
+                                                            attention_mask=tokens[BERT_INPUT_MASKS], labels=labels)
+        if labels is not None:
+            loss, logits = outputs[:2]
+        else:
+            loss = None
+            logits = outputs[0]
 
-        sequence_output = self._dropout(sequence_output)
-        logits = self._classifier(sequence_output)
-
-        outputs = (logits,) + outputs[2:]  # add hidden states and attention if they are here
+        preds = torch.sigmoid(logits) > 0.5
+        preds = preds.detach().cpu().numpy()
+        preds = self._mlb.inverse_transform(preds)
 
         if labels is not None:
-            loss_fct = BCEWithLogitsLoss()
-            loss = loss_fct(logits, labels)
-            outputs = (loss,) + outputs  # (loss), logits, (hidden_states), (attentions)
-
-            preds = torch.sigmoid(logits) > 0.5
-            preds = preds.detach().cpu().numpy()
             golds = labels.detach().cpu().numpy()
-
-            preds = self._mlb.inverse_transform(preds)
             golds = self._mlb.inverse_transform(golds)
-            preds, golds = BertMultilabelClassification.flatten_labels(preds, golds)
+        else:
+            golds = None
 
-            return {LOSS: loss, PREDICT: preds, GOLD: golds,
-                    OUTPUT: outputs}
+        preds, golds = BertMultilabelClassification.flatten_labels(preds, golds)
+
+        return {LOSS: loss, PREDICT: preds, GOLD: golds,
+                OUTPUT: outputs}

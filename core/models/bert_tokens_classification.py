@@ -1,59 +1,50 @@
 import torch.nn as nn
 import torch.nn.functional as f
-from torch.nn import CrossEntropyLoss
 
-from core.common import LOSS, PREDICT, GOLD, OUTPUT
-from core.meta import BertInstance
-from libs.transformers import BertPreTrainedModel
+from core.common import *
+from libs.transformers import BertConfig, BertForTokenClassification
 
 
-class BertTokenClassification(BertPreTrainedModel):
+class BertTokenClassification(nn.Module):
     def __init__(
-            self, bert_config, args
+            self, args
     ) -> None:
-        super(BertTokenClassification, self).__init__(bert_config)
+        super(BertTokenClassification, self).__init__()
 
         self._label_map = {i: label for i, label in enumerate(args.labels)}
         self._num_labels = len(args.labels)
 
-        self._bert = BertInstance.get_bert(args)['model']
-        self._dropout = nn.Dropout(bert_config.hidden_dropout_prob)
-
-        self._classifier = nn.Linear(bert_config.hidden_size, self._num_labels)
-
-        self.init_weights()
+        config = BertConfig.from_pretrained(args.config_name if args.config_name else args.model_name_or_path,
+                                            num_labels=self._num_labels)
+        self._bert_for_token_classification = BertForTokenClassification.from_pretrained(args.model_name_or_path,
+                                                                                         from_tf=bool(
+                                                                                             '.ckpt' in args.model_name_or_path),
+                                                                                         config=config)
 
     def forward(self, batch):
         tokens = batch['tokens']
-        labels = tokens['token_labels']
+        labels = tokens[BERT_TOKEN_LABELS]
+        token_mask = tokens[BERT_TOKEN_MASKS]
 
-        outputs = self._bert(tokens['input_ids'], attention_mask=tokens['input_mask'])
-        sequence_output = outputs[0]
-        sequence_output = self._dropout(sequence_output)
-        logits = self._classifier(sequence_output)
-
-        outputs = (logits,) + outputs[2:]  # add hidden states and attention if they are here
+        outputs = self._bert_for_token_classification(tokens[BERT_INPUT_IDS], token_mask,
+                                                      attention_mask=tokens[BERT_INPUT_MASKS],
+                                                      labels=labels)
         if labels is not None:
-            loss_fct = CrossEntropyLoss()
-            # Only keep active parts of the loss
-            if tokens['input_mask'] is not None:
-                # active_loss = attention_mask.view(-1) == 1
-                active_loss = labels.view(-1) != -1
-                active_logits = logits.view(-1, self._num_labels)[active_loss]
-                active_labels = labels.view(-1)[active_loss]
-                loss = loss_fct(active_logits, active_labels)
-            else:
-                loss = loss_fct(logits.view(-1, self._num_labels), labels.view(-1))
-            outputs = (loss,) + outputs  # (loss), scores, (hidden_states), (attentions)
+            loss, logits = outputs[:2]
+        else:
+            loss = None
+            logits = outputs[0]
 
-            preds = f.softmax(logits, dim=-1).data
-            preds = preds.argmax(dim=-1).view(-1)
-            active_indices = labels.view(-1) != -1
-            preds = preds.view(-1)[active_indices]
+        preds = f.softmax(logits, dim=-1).data
+        preds = preds.argmax(dim=-1).view(-1)
+        active_indices = token_mask.view(-1) == -1
+        preds = preds.view(-1)[active_indices]
+        preds = preds.detach().cpu().numpy()
+        if labels is not None:
             golds = labels.view(-1)[active_indices]
-
-            preds = preds.detach().cpu().numpy()
             golds = golds.detach().cpu().numpy()
+        else:
+            golds = None
 
-            return {LOSS: loss, PREDICT: preds, GOLD: golds,
-                    OUTPUT: outputs}
+        return {LOSS: loss, PREDICT: preds, GOLD: golds,
+                OUTPUT: outputs}

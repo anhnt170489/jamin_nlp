@@ -1,53 +1,45 @@
 import numpy as np
-import torch.nn as nn
-from torch.nn import MSELoss, CrossEntropyLoss
+from torch import nn
 
-from core.common import LOSS, PREDICT, GOLD, OUTPUT
-from core.meta import BertInstance
-from libs.transformers import BertPreTrainedModel
+from core.common import *
+from libs.transformers import BertForSequenceClassification, BertConfig
 
 
-class BertSequenceClassification(BertPreTrainedModel):
+class BertSequenceClassification(nn.Module):
     def __init__(
-            self, bert_config, args
+            self, args
     ) -> None:
-        super(BertSequenceClassification, self).__init__(bert_config)
-
-        self._label_map = {i: label for i, label in enumerate(args.labels)}
+        super(BertSequenceClassification, self).__init__()
         self._num_labels = len(args.labels)
 
-        self._bert = BertInstance.get_bert(args)['model']
-        self._dropout = nn.Dropout(bert_config.hidden_dropout_prob)
-
-        self._classifier = nn.Linear(bert_config.hidden_size, self._num_labels)
-
-        self.init_weights()
+        config = BertConfig.from_pretrained(args.config_name if args.config_name else args.model_name_or_path,
+                                            num_labels=self._num_labels)
+        self._bert_for_sequence_classification = BertForSequenceClassification.from_pretrained(args.model_name_or_path,
+                                                                                               from_tf=bool(
+                                                                                                   '.ckpt' in args.model_name_or_path),
+                                                                                               config=config)
 
     def forward(self, batch):
         tokens = batch['tokens']
-        labels = batch['label']
+        labels = batch['label'] if 'label' in batch else None
 
-        outputs = self._bert(tokens['input_ids'], attention_mask=tokens['input_mask'])
-        pooled_output = outputs[1]
-
-        pooled_output = self._dropout(pooled_output)
-        logits = self._classifier(pooled_output)
-
-        outputs = (logits,) + outputs[2:]  # add hidden states and attention if they are here
-
+        outputs = self._bert_for_sequence_classification(tokens[BERT_INPUT_IDS],
+                                                         attention_mask=tokens[BERT_INPUT_MASKS],
+                                                         token_type_ids=tokens[BERT_SEGMENT_IDS],
+                                                         labels=batch['label'])
         if labels is not None:
-            if self._num_labels == 1:
-                #  We are doing regression
-                loss_fct = MSELoss()
-                loss = loss_fct(logits.view(-1), labels.view(-1))
-            else:
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self._num_labels), labels.view(-1))
-            outputs = (loss,) + outputs  # (loss), logits, (hidden_states), (attentions)
-
+            loss, logits = outputs[:2]
+        else:
+            loss = None
+            logits = outputs[0]
+        if self._num_labels == 1:
+            #  We are doing regression
+            preds = np.squeeze(logits.detach().cpu().numpy())
+        else:
             preds = logits.detach().cpu().numpy()
             preds = np.argmax(preds, axis=1)
-            golds = labels.detach().cpu().numpy()
 
-            return {LOSS: loss, PREDICT: preds, GOLD: golds,
-                    OUTPUT: outputs}
+        golds = labels.detach().cpu().numpy()
+
+        return {LOSS: loss, PREDICT: preds, GOLD: golds,
+                OUTPUT: outputs}
