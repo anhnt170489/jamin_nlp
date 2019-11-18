@@ -17,13 +17,13 @@ from utils import log_eval_result
 
 logger = logging.getLogger(__name__)
 
-from utils import cache_data, load_cached_data, make_dirs
+from utils import cache_data, load_cached_data, make_dirs, handle_checkpoints
 
 from core.eval import Evaluator
 
 import glob
 
-from libs.transformers import WEIGHTS_NAME, BertConfig, XLNetConfig, XLMConfig
+from libs.transformers import BertConfig, XLNetConfig, XLMConfig
 
 ALL_MODELS = sum((tuple(conf.pretrained_config_archive_map.keys()) \
                   for conf in (BertConfig, XLNetConfig, XLMConfig)), ())
@@ -157,6 +157,8 @@ def main():
                              "A number of warnings are expected for a normal SQuAD evaluation.")
     parser.add_argument('--null_score_diff_threshold', type=float, default=0.0,
                         help="If null_score - best_non_null is greater than the threshold predict null.")
+    parser.add_argument("--pretrained_qa_model", default=None, type=str,
+                        help="Path to pre-trained qa model ")
 
     args = parser.parse_args()
 
@@ -245,6 +247,13 @@ def main():
         torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
 
     model.to(args.device)
+    if args.pretrained_qa_model:
+        handle_checkpoints(model=model,
+                           checkpoint_dir=args.pretrained_qa_model,
+                           params={
+                               'device': device
+                           },
+                           resume=True)
 
     # Training
     if args.do_train:
@@ -275,12 +284,17 @@ def main():
             if args.eval_all_checkpoints:
                 checkpoints = list(
                     os.path.dirname(c) for c in
-                    sorted(glob.glob(args.output_dir + '/**/' + WEIGHTS_NAME, recursive=True)))
+                    sorted(glob.glob(args.output_dir + '/**/*.pt', recursive=True)))
                 logging.getLogger("pytorch_transformers.modeling_utils").setLevel(logging.WARN)  # Reduce logging
             logger.info("Evaluate the following checkpoints: %s", checkpoints)
             for checkpoint in checkpoints:
                 global_step = checkpoint.split('-')[-1] if len(checkpoints) > 1 else ""
-                model = model.__class__.from_pretrained(checkpoint, args=args)
+                handle_checkpoints(model=model,
+                                   checkpoint_dir=checkpoint,
+                                   params={
+                                       'device': device
+                                   },
+                                   resume=True)
                 result = Evaluator.evaluate(dev_instances, model, args, metrics=metrics)
                 if args.eval_measure in result and result[args.eval_measure] > best_score:
                     best_score = result[args.eval_measure]
@@ -303,7 +317,12 @@ def main():
 
         assert checkpoint, ('No model to predict')
         logger.info("Predict the following checkpoints: %s", checkpoint)
-        model.__class__.from_pretrained(checkpoint, args=args)
+        handle_checkpoints(model=model,
+                           checkpoint_dir=checkpoint,
+                           params={
+                               'device': device
+                           },
+                           resume=True)
         preds = Evaluator.evaluate(test_instances, model, args, predict=True)
 
         all_results = []
