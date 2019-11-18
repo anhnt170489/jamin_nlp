@@ -46,9 +46,13 @@ def read_lines(filename, encoding="UTF-8"):
             yield line.rstrip("\r\n\v")
 
 
-def dump_json(data, ensure_ascii=False, indent=2):
+def dump_json(data, out_file=None, ensure_ascii=False, indent=2):
     import json
-    return json.dumps(data, ensure_ascii=ensure_ascii, indent=indent)
+    if out_file is None:
+        return json.dumps(data, ensure_ascii=ensure_ascii, indent=indent)
+    else:
+        with open(out_file, 'w', encoding='utf-8') as outfile:
+            json.dump(data, outfile, ensure_ascii=ensure_ascii, indent=indent)
 
 
 def collate(batch):
