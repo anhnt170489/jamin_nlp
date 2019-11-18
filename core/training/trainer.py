@@ -49,7 +49,7 @@ class Trainer(object):
 
         if do_save_model:
             handle_checkpoints(model=model,
-                               checkpoint_dir=args.output_dir,
+                               checkpoint_dir=os.path.join(args.output_dir, 'checkpoint-{}'.format(str(global_step))),
                                params={
                                    "filename": "checkpoint",
                                    "global_step": global_step},
