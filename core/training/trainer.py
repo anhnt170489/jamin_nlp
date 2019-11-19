@@ -11,8 +11,8 @@ from tqdm import tqdm, trange
 from core.common import *
 from core.eval import Evaluator
 from core.meta import JaminDataset
+from libs import AdamW, get_linear_schedule_with_warmup
 from libs.opt import Lamb, RAdam, Ranger
-from libs.transformers import AdamW, WarmupLinearSchedule
 from utils import collate
 from utils import log_eval_result, handle_checkpoints
 
@@ -99,7 +99,8 @@ class Trainer(object):
             optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
 
         if optimizer_type not in [RADAM, RANGER]:
-            scheduler = WarmupLinearSchedule(optimizer, warmup_steps=args.warmup_steps, t_total=t_total)
+            scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=args.warmup_steps,
+                                                        num_training_steps=t_total)
 
         if args.fp16:
             try:

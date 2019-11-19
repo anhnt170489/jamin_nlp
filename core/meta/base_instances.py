@@ -4,7 +4,7 @@ from typing import List
 import torch
 
 from core.common import *
-from libs.transformers import BertTokenizer, RobertaTokenizer
+from libs import BertTokenizer, RobertaTokenizer
 
 
 class TensorInstance(object):
@@ -323,6 +323,8 @@ class BertQAInstance(BertInstance):
 
         query_segment_id = Q_MASK
         answer_segment_id = A_MASK
+        if args.model_type == 'roberta':
+            query_segment_id, answer_segment_id = 0, 0
         cls_token_segment_id = 2 if args.model_type in ['xlnet'] else 0
         pad_token_segment_id = 3 if args.model_type in ['xlnet'] else 0
 
@@ -370,6 +372,7 @@ class BertQAInstance(BertInstance):
             cls_index = 0
 
         # XLNet: P SEP Q SEP CLS
+        # Roberta: CLS Q SEP SEP P SEP
         # Others: CLS Q SEP P SEP
         if not self.configs['sequence_a_is_doc']:
             # Query
@@ -381,6 +384,10 @@ class BertQAInstance(BertInstance):
             tokens.append(self.configs['sep_token'])
             segment_ids.append(self.configs['query_segment_id'])
             p_mask.append(Q_MASK)
+            if args.model_type == 'roberta':
+                tokens.append(self.configs['sep_token'])
+                segment_ids.append(self.configs['query_segment_id'])
+                p_mask.append(Q_MASK)
 
         # Add doc tokens
         for token in doc_tokens:
