@@ -2,7 +2,8 @@ import torch
 import torch.nn as nn
 
 from core.common import *
-from libs.transformers import BertConfig, BertForQuestionAnswering
+from libs import BertConfig, RobertaConfig, BertForQuestionAnswering
+from .modeling_roberta import RobertaForQuestionAnswering
 
 
 class BertQuestionAnswering(nn.Module):
@@ -10,10 +11,15 @@ class BertQuestionAnswering(nn.Module):
             self, args
     ) -> None:
         super(BertQuestionAnswering, self).__init__()
-        config = BertConfig.from_pretrained(args.config_name if args.config_name else args.model_name_or_path)
-        self._bert_for_qa = BertForQuestionAnswering.from_pretrained(args.model_name_or_path,
-                                                                     from_tf=bool('.ckpt' in args.model_name_or_path),
-                                                                     config=config)
+        if args.model_type == 'roberta':
+            config_cls, model_cls_for_qa = RobertaConfig, RobertaForQuestionAnswering
+        elif args.model_type == 'bert':
+            config_cls, model_cls_for_qa = BertConfig, BertForQuestionAnswering
+
+        config = config_cls.from_pretrained(args.config_name if args.config_name else args.model_name_or_path)
+        self._bert_for_qa = model_cls_for_qa.from_pretrained(args.model_name_or_path,
+                                                             from_tf=bool('.ckpt' in args.model_name_or_path),
+                                                             config=config)
 
         self.device = args.device
 

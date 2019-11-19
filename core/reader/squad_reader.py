@@ -6,7 +6,7 @@ from tqdm import tqdm
 
 from core.common import *
 from core.meta import SQUADInstance, SQUADContent, BertInstance, BertQAInstance
-from libs.transformers.tokenization_bert import whitespace_tokenize
+from libs.transformers.transformers.tokenization_bert import whitespace_tokenize
 from .json_data_reader import JsonDataReader
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
@@ -235,8 +235,12 @@ class SQUADReader(JsonDataReader):
                     all_doc_tokens, tok_start_position, tok_end_position, tokenizer,
                     instance.orig_answer_text)
 
-            # The -3 accounts for [CLS], [SEP] and [SEP]
-            max_tokens_for_doc = self.args.max_seq_length - len(query_tokens) - 3
+            # Roberta: -4 accounts for [CLS], [SEP][SEP] and [SEP]
+            # Bert: -3 accounts for [CLS], [SEP] and [SEP]
+            if self.args.model_type == 'roberta':
+                max_tokens_for_doc = self.args.max_seq_length - len(query_tokens) - 4
+            else:
+                max_tokens_for_doc = self.args.max_seq_length - len(query_tokens) - 3
 
             # We can have documents that are longer than the maximum sequence length.
             # To deal with this we do a sliding window approach, where we take chunks
@@ -264,13 +268,17 @@ class SQUADReader(JsonDataReader):
                     len_tokens += 1
 
                 # XLNet: P SEP Q SEP CLS
+                # Roberta: CLS Q SEP SEP P SEP
                 # Others: CLS Q SEP P SEP
                 if not sequence_a_is_doc:
                     # Query
                     len_tokens += len(query_tokens)
 
                     # SEP token
-                    len_tokens += 1
+                    if self.args.model_type == 'roberta':
+                        len_tokens += 2
+                    else:
+                        len_tokens += 1
 
                 # Paragraph
                 doc_tokens = []

@@ -72,7 +72,7 @@ class SQUADPredictWriter(PredictWriter):
         # and `pred_text`, and check if they are the same length. If they are
         # NOT the same length, the heuristic has failed. If they are the same
         # length, we assume the characters are one-to-one aligned.
-        from libs.transformers.tokenization_bert import BasicTokenizer
+        from libs.transformers.transformers.tokenization_bert import BasicTokenizer
         tokenizer = BasicTokenizer(do_lower_case=do_lower_case)
 
         tok_text = " ".join(tokenizer.tokenize(orig_text))
@@ -335,15 +335,15 @@ class SQUADPredictWriter(PredictWriter):
                     all_predictions[qas_id] = best_non_null_entry.text
             all_nbest_json[qas_id] = nbest_json
 
-        import json
+        from utils import dump_json
         with open(output_prediction_file, "w") as writer:
-            writer.write(json.dumps(all_predictions, indent=4) + "\n")
+            writer.write(dump_json(all_predictions, indent=4) + "\n")
 
         with open(output_nbest_file, "w") as writer:
-            writer.write(json.dumps(all_nbest_json, indent=4) + "\n")
+            writer.write(dump_json(all_nbest_json, indent=4) + "\n")
 
         if args.version_2_with_negative:
             with open(output_null_log_odds_file, "w") as writer:
-                writer.write(json.dumps(scores_diff_json, indent=4) + "\n")
+                writer.write(dump_json(scores_diff_json, indent=4) + "\n")
 
         return all_predictions

@@ -12,7 +12,7 @@ from core.meta import SQUADResult
 from core.models import BertQuestionAnswering
 from core.reader import SQUADReader
 from core.training import Trainer
-from libs.transformers import BertTokenizer
+from libs import BertTokenizer, RobertaTokenizer
 from utils import log_eval_result
 
 logger = logging.getLogger(__name__)
@@ -22,11 +22,6 @@ from utils import cache_data, load_cached_data, make_dirs, handle_checkpoints
 from core.eval import Evaluator
 
 import glob
-
-from libs.transformers import BertConfig, XLNetConfig, XLMConfig
-
-ALL_MODELS = sum((tuple(conf.pretrained_config_archive_map.keys()) \
-                  for conf in (BertConfig, XLNetConfig, XLMConfig)), ())
 
 
 def set_seed(args):
@@ -123,8 +118,7 @@ def main():
     parser.add_argument("--model_type", default=None, type=str, required=True,
                         help="Model type selected in the list: bert,roberta")
     parser.add_argument("--model_name_or_path", default=None, type=str, required=True,
-                        help="Path to pre-trained model or shortcut name selected in the list: " + ", ".join(
-                            ALL_MODELS))
+                        help="Path to pre-trained bert/roberta model or shortcut name")
     parser.add_argument("--config_name", default="", type=str,
                         help="Pretrained config name or path if not the same as model_name")
     parser.add_argument("--tokenizer_name", default="", type=str,
@@ -202,7 +196,12 @@ def main():
     if args.local_rank not in [-1, 0]:
         torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
 
-    tokenizer = BertTokenizer.from_pretrained(args.model_name_or_path)
+    if args.model_type == 'roberta':
+        tokenizer_cls = RobertaTokenizer
+    elif args.model_type == 'bert':
+        tokenizer_cls = BertTokenizer
+
+    tokenizer = tokenizer_cls.from_pretrained(args.model_name_or_path)
     if args.max_seq_length <= 0:
         args.max_seq_length = tokenizer.max_len_single_sentence  # Our input block size will be the max possible for the model
     args.max_seq_length = min(args.max_seq_length, tokenizer.max_len_single_sentence)
