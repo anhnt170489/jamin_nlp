@@ -6,6 +6,7 @@ from torch.utils.data import (
     DataLoader,
     RandomSampler,
 )
+from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 
 from core.common import *
@@ -66,7 +67,10 @@ class Trainer(object):
                             level=logging.INFO if args.local_rank in [-1, 0] else logging.WARN)
 
         train_data = JaminDataset(data=train_instances, device=args.device)
-        sampler = RandomSampler(train_data)
+        if args.local_rank == -1:
+            sampler = RandomSampler(train_data)
+        else:
+            sampler = DistributedSampler(train_data)
         batch_size = args.per_gpu_train_batch_size * max(1, args.n_gpu)
         args.train_batch_size = batch_size
         iterator = trange(int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0])
@@ -109,12 +113,19 @@ class Trainer(object):
                 raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
             model, optimizer = amp.initialize(model, optimizer, opt_level=args.fp16_opt_level)
 
+        if args.local_rank != -1 > 1:
+            model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.local_rank],
+                                                              output_device=args.local_rank,
+                                                              find_unused_parameters=True)
+            logging.info('Finish wrapping model with DistributedDataParallel')
+
         logger.info("***** Running training *****")
         logger.info("  Num examples = %d", len(train_data))
         logger.info("  Num Epochs = %d", args.num_train_epochs)
         logger.info("  Instantaneous batch size per GPU = %d", args.per_gpu_train_batch_size)
         logger.info("  Total train batch size (w. parallel, distributed & accumulation) = %d",
-                    args.train_batch_size * args.gradient_accumulation_steps
+                    args.train_batch_size * args.gradient_accumulation_steps * (
+                        torch.distributed.get_world_size() if args.local_rank != -1 else 1)
                     )
         logger.info("  Gradient Accumulation steps = %d", args.gradient_accumulation_steps)
         logger.info("  Total optimization steps = %d", t_total)
@@ -151,13 +162,15 @@ class Trainer(object):
                 if args.fp16:
                     with amp.scale_loss(loss, optimizer) as scaled_loss:
                         scaled_loss.backward()
-                    torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), args.max_grad_norm)
                 else:
                     loss.backward()
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
 
                 tr_loss += loss.item()
                 if (step + 1) % args.gradient_accumulation_steps == 0:
+                    if args.fp16:
+                        torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), args.max_grad_norm)
+                    else:
+                        torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
                     optimizer.step()
                     if optimizer_type not in [RADAM, RANGER]:
                         scheduler.step()  # Update learning rate schedule
