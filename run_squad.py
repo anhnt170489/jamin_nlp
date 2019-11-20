@@ -173,21 +173,26 @@ def main():
         ptvsd.enable_attach(address=(args.server_ip, args.server_port), redirect_output=True)
         ptvsd.wait_for_attach()
 
-    if args.gpu >= 0:
-        device = torch.device("cuda:" + str(args.gpu) if torch.cuda.is_available() else "cpu")
-        torch.cuda.set_device(args.gpu)
+    if args.local_rank >= 0:
+        torch.cuda.set_device(args.local_rank)
+        args.device = torch.device("cuda", args.local_rank)
+        torch.distributed.init_process_group(backend='nccl')
+        args.n_gpu = 1
     else:
-        device = torch.device("cpu")
-    args.device = device
-    args.n_gpu = 1
+        if args.gpu >= 0:
+            args.device = torch.device("cuda:" + str(args.gpu) if torch.cuda.is_available() else "cpu")
+            torch.cuda.set_device(args.gpu)
+            args.n_gpu = 1
+        else:
+            args.device = torch.device("cpu")
+            args.n_gpu = 0
 
     # Setup logging
     logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
                         datefmt='%m/%d/%Y %H:%M:%S',
                         level=logging.INFO if args.local_rank in [-1, 0] else logging.WARN)
     logger.warning("Process rank: %s, device: %s, n_gpu: %s, distributed training: %s, 16-bits training: %s",
-                   # args.local_rank, device, args.n_gpu, bool(args.local_rank != -1), args.fp16)
-                   args.local_rank, device, args.n_gpu, bool(False), args.fp16)
+                   args.local_rank, args.device, args.n_gpu, bool(args.local_rank != -1), args.fp16)
 
     # Set seed
     set_seed(args)
@@ -291,7 +296,7 @@ def main():
                 handle_checkpoints(model=model,
                                    checkpoint_dir=checkpoint,
                                    params={
-                                       'device': device
+                                       'device': args.device
                                    },
                                    resume=True)
                 result = Evaluator.evaluate(dev_instances, model, args, metrics=metrics)
@@ -319,7 +324,7 @@ def main():
         handle_checkpoints(model=model,
                            checkpoint_dir=checkpoint,
                            params={
-                               'device': device
+                               'device': args.device
                            },
                            resume=True)
         preds = Evaluator.evaluate(test_instances, model, args, predict=True)
