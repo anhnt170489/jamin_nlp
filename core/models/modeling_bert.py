@@ -1151,7 +1151,7 @@ class BertForTokenClassification(BertPreTrainedModel):
 
         self.init_weights()
 
-    def forward(self, token_mask, input_ids=None, attention_mask=None, token_type_ids=None,
+    def forward(self, token_mask=None, input_ids=None, attention_mask=None, token_type_ids=None,
                 position_ids=None, head_mask=None, inputs_embeds=None, labels=None):
 
         outputs = self.bert(input_ids,
