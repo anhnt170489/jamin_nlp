@@ -2,7 +2,7 @@ import numpy as np
 from torch import nn
 
 from core.common import *
-from libs.transformers import BertForSequenceClassification, BertConfig
+from libs import BertConfig, BertForSequenceClassification
 
 
 class BertSequenceClassification(nn.Module):

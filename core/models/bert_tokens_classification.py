@@ -2,7 +2,8 @@ import torch.nn as nn
 import torch.nn.functional as f
 
 from core.common import *
-from libs.transformers import BertConfig, BertForTokenClassification
+from libs import BertConfig
+from .modeling_bert import BertForTokenClassification
 
 
 class BertTokenClassification(nn.Module):
@@ -26,7 +27,7 @@ class BertTokenClassification(nn.Module):
         labels = tokens[BERT_TOKEN_LABELS]
         token_mask = tokens[BERT_TOKEN_MASKS]
 
-        outputs = self._bert_for_token_classification(tokens[BERT_INPUT_IDS], token_mask,
+        outputs = self._bert_for_token_classification(input_ids=tokens[BERT_INPUT_IDS], token_mask=token_mask,
                                                       attention_mask=tokens[BERT_INPUT_MASKS],
                                                       labels=labels)
         if labels is not None:

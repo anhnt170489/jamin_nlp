@@ -9,19 +9,17 @@ import torch
 from core.common import *
 from core.reader import BiossesReader, BC5CDRReader, DDI2013Reader, ChemProtReader, HOCReader, MedNLIReader
 from core.training import Trainer
-from libs.transformers import BertTokenizer, BertConfig, RobertaConfig
+from libs import BertTokenizer, BertConfig, RobertaConfig
 from utils import log_eval_result
 
 logger = logging.getLogger(__name__)
 
-from utils import cache_data, load_cached_data
+from utils import cache_data, load_cached_data, handle_checkpoints
 
 from core.models import BertSequenceClassification, BertTokenClassification, BertMultilabelClassification
 from core.eval import AccAndF1Metrics, PearsonAndSpearman, Evaluator
 
 import glob
-
-from libs.transformers import WEIGHTS_NAME
 
 ALL_MODELS = sum(
     (tuple(conf.pretrained_config_archive_map.keys()) for conf in (BertConfig, RobertaConfig)),
@@ -81,7 +79,7 @@ def main():
     parser.add_argument("--optimizer",
                         type=str,
                         default='ADAM',
-                        help="Optimizer to use. (ADAM, LAMB, RADAM)")
+                        help="Optimizer to use. (ADAM, LAMB, RADAM, RANGER)")
     parser.add_argument("--opt_level",
                         type=str,
                         default='O1',
@@ -172,21 +170,26 @@ def main():
         ptvsd.enable_attach(address=(args.server_ip, args.server_port), redirect_output=True)
         ptvsd.wait_for_attach()
 
-    if args.gpu >= 0:
-        device = torch.device("cuda:" + str(args.gpu) if torch.cuda.is_available() else "cpu")
-        torch.cuda.set_device(args.gpu)
+    if args.local_rank >= 0:
+        torch.cuda.set_device(args.local_rank)
+        args.device = torch.device("cuda", args.local_rank)
+        torch.distributed.init_process_group(backend='nccl')
+        args.n_gpu = 1
     else:
-        device = torch.device("cpu")
-    args.device = device
-    args.n_gpu = 1
+        if args.gpu >= 0:
+            args.device = torch.device("cuda:" + str(args.gpu) if torch.cuda.is_available() else "cpu")
+            torch.cuda.set_device(args.gpu)
+            args.n_gpu = 1
+        else:
+            args.device = torch.device("cpu")
+            args.n_gpu = 0
 
     # Setup logging
     logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
                         datefmt='%m/%d/%Y %H:%M:%S',
                         level=logging.INFO if args.local_rank in [-1, 0] else logging.WARN)
     logger.warning("Process rank: %s, device: %s, n_gpu: %s, distributed training: %s, 16-bits training: %s",
-                   # args.local_rank, device, args.n_gpu, bool(args.local_rank != -1), args.fp16)
-                   args.local_rank, device, args.n_gpu, bool(False), args.fp16)
+                   args.local_rank, args.device, args.n_gpu, bool(args.local_rank != -1), args.fp16)
 
     # Set seed
     set_seed(args)
@@ -292,12 +295,17 @@ def main():
             if args.eval_all_checkpoints:
                 checkpoints = list(
                     os.path.dirname(c) for c in
-                    sorted(glob.glob(args.output_dir + '/**/' + WEIGHTS_NAME, recursive=True)))
+                    sorted(glob.glob(args.output_dir + '/**/*.pt', recursive=True)))
                 logging.getLogger("pytorch_transformers.modeling_utils").setLevel(logging.WARN)  # Reduce logging
             logger.info("Evaluate the following checkpoints: %s", checkpoints)
             for checkpoint in checkpoints:
                 global_step = checkpoint.split('-')[-1] if len(checkpoints) > 1 else ""
-                model = model.__class__.from_pretrained(checkpoint, args=args)
+                handle_checkpoints(model=model,
+                                   checkpoint_dir=checkpoint,
+                                   params={
+                                       'device': args.device
+                                   },
+                                   resume=True)
                 result = Evaluator.evaluate(dev_instances, model, args, metrics=metrics)
                 if args.eval_measure in result and result[args.eval_measure] > best_score:
                     best_score = result[args.eval_measure]

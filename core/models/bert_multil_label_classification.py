@@ -2,8 +2,8 @@ import torch
 import torch.nn as nn
 
 from core.common import *
-from libs.transformers import BertConfig
-from libs.transformers.modeling_bert import BertForMultiLabelClassification
+from libs import BertConfig
+from .modeling_bert import BertForMultiLabelClassification
 
 
 class BertMultilabelClassification(nn.Module):

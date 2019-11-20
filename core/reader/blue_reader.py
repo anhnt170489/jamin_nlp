@@ -131,10 +131,10 @@ class BC5CDRReader(BLUEReader):
 class HOCReader(BLUEReader):
 
     def get_labels(self):
-        return ['sustaining', 'proliferative', 'signaling', 'evading', 'growth', 'suppressors', 'resisting', 'cell',
-                'death', 'avoiding', 'immune', 'destruction', 'activating', 'invasion', 'metastasis', 'tumor',
-                'promoting', 'inflammation', 'enabling', 'replicative', 'immortality', 'genomic', 'instability',
-                'mutation', 'inducing', 'angiogenesis', 'cellular', 'energetics']
+        return ['sustaining proliferative signaling', 'evading growth suppressors', 'resisting cell death',
+                'avoiding immune destruction', 'activating invasion and metastasis', 'tumor promoting inflammation',
+                'enabling replicative immortality', 'genomic instability and mutation', 'inducing angiogenesis',
+                'cellular energetics']
 
     def _create_text_instances(self, lines, set_type):
         """Creates examples for the training and dev sets."""
@@ -145,7 +145,7 @@ class HOCReader(BLUEReader):
             guid = "%s-%s" % (set_type, line[0])
             text_a = line[1]
             text_b = None
-            label = line[2].replace('and', ' ').replace(',', ' ').split()
+            label = line[2].split(',')
             examples.append(BLUEInstance(guid=guid, text_a=text_a, text_b=text_b, label=label))
         return examples
 

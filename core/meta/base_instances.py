@@ -66,7 +66,10 @@ class MultiLabelInstance(TensorInstance):
 
     @property
     def label_id(self):
-        label_id = [self.label_map[lbl] for lbl in self.label_list]
+        try:
+            label_id = [self.label_map[lbl] for lbl in self.label_list]
+        except:
+            label_id = []
         return label_id
 
     @property
