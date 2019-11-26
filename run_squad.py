@@ -17,7 +17,7 @@ from utils import log_eval_result
 
 logger = logging.getLogger(__name__)
 
-from utils import cache_data, load_cached_data, make_dirs, handle_checkpoints
+from utils import cache_data, load_cached_data, make_dirs, handle_checkpoints, ensemble_models
 
 from core.eval import Evaluator
 
@@ -43,6 +43,10 @@ def main():
     ## Training parameter
     parser.add_argument("--do_train", action='store_true',
                         help="Whether to run training.")
+    parser.add_argument("--pretrained_model", default=None, type=str,
+                        help="Path to pre-trained qa model ")
+    parser.add_argument("--models_to_ensemble", default=None, type=str,
+                        help="Path to pre-trained qa model ")
     parser.add_argument("--do_eval", action='store_true',
                         help="Whether to run eval on the dev set.")
     parser.add_argument("--do_predict", action='store_true',
@@ -151,8 +155,6 @@ def main():
                              "A number of warnings are expected for a normal SQuAD evaluation.")
     parser.add_argument('--null_score_diff_threshold', type=float, default=0.0,
                         help="If null_score - best_non_null is greater than the threshold predict null.")
-    parser.add_argument("--pretrained_qa_model", default=None, type=str,
-                        help="Path to pre-trained qa model ")
 
     args = parser.parse_args()
 
@@ -251,11 +253,12 @@ def main():
         torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
 
     model.to(args.device)
-    if args.pretrained_qa_model:
+
+    if args.pretrained_model:
         handle_checkpoints(model=model,
                            checkpoint_dir=args.pretrained_qa_model,
                            params={
-                               'device': device
+                               'device': args.device
                            },
                            resume=True)
 
@@ -313,20 +316,29 @@ def main():
                 log_eval_result(result, output_eval_file)
 
     if args.do_predict:
-        checkpoint = args.model_to_predict
-        if not checkpoint:
-            if args.do_eval and best_check_point is not None:
-                logger.info("There's no model to predict, the best checkpoint when evaluating will be used")
-                checkpoint = best_check_point
+        if args.models_to_ensemble:
+            from utils import ensemble_models
+            ensemble_models(model=model,
+                            models_to_ensemble_dir=args.models_to_ensemble,
+                            params={
+                                'device': args.device
+                            })
+        else:
+            checkpoint = args.model_to_predict
+            if not checkpoint:
+                if args.do_eval and best_check_point is not None:
+                    logger.info("There's no model to predict, the best checkpoint when evaluating will be used")
+                    checkpoint = best_check_point
 
-        assert checkpoint, ('No model to predict')
-        logger.info("Predict the following checkpoints: %s", checkpoint)
-        handle_checkpoints(model=model,
-                           checkpoint_dir=checkpoint,
-                           params={
-                               'device': args.device
-                           },
-                           resume=True)
+            assert checkpoint, ('No model to predict')
+            logger.info("Predict the following checkpoints: %s", checkpoint)
+            handle_checkpoints(model=model,
+                               checkpoint_dir=checkpoint,
+                               params={
+                                   'device': args.device
+                               },
+                               resume=True)
+        return
         preds = Evaluator.evaluate(test_instances, model, args, predict=True)
 
         all_results = []
