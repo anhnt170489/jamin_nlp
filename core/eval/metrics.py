@@ -90,6 +90,8 @@ class Metrics(object):
 
 
 class AccAndF1Metrics(Metrics):
+    def __init__(self, average='micro'):
+        self.average = average
 
     def compute(self, preds, golds):
         _preds = None
@@ -103,7 +105,7 @@ class AccAndF1Metrics(Metrics):
                 _golds = np.append(batch_golds, _golds, axis=0)
 
         acc = AccAndF1Metrics.simple_accuracy(_preds, _golds)
-        f1 = f1_score(y_true=_golds, y_pred=_preds, average='micro')
+        f1 = f1_score(y_true=_golds, y_pred=_preds, average=self.average)
         return {
             "acc": acc,
             "f1": f1,

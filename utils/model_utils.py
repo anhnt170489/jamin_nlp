@@ -137,3 +137,36 @@ def handle_checkpoints(
         if num_saved > 0:
             for old_checkpoint_file in checkpoint_files[num_saved - 1:]:
                 os.remove(old_checkpoint_file)
+
+
+def ensemble_models(
+        model,
+        models_to_ensemble_dir,
+        params={},
+        type='MEAN'
+):
+    # List all checkpoints in the directory
+    checkpoint_files = sorted(
+        glob(os.path.join(models_to_ensemble_dir, "*.*")), reverse=True
+    )
+
+    # There is no checkpoint to resume
+    num_checkpoint = len(checkpoint_files)
+    if num_checkpoint == 0:
+        return None
+
+    checkpoints = []
+    for checkpoint_file in checkpoint_files:
+        checkpoints.append(torch.load(checkpoint_file, map_location=params['device'])['model'])
+
+    if num_checkpoint > 1:
+        for k, _ in checkpoints[0].items():
+            if k != '_meta_data':
+                for checkpoint in checkpoints[1:]:
+                    checkpoints[0][k] += checkpoint[k]
+                if type == 'MEAN':
+                    checkpoints[0][k] = checkpoints[0][k] / num_checkpoint
+
+    logger.info('Ensemble model from %s', models_to_ensemble_dir)
+    # Restore parameters
+    model.load_state_dict(checkpoints[0])
