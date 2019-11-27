@@ -32,8 +32,8 @@ def set_seed(args):
         torch.cuda.manual_seed_all(args.seed)
 
 
-def main(args):
-    parser = argparse.ArgumentParser(args)
+def main():
+    parser = argparse.ArgumentParser()
     ## Required parameters
     parser.add_argument("--data_dir", default=None, type=str, required=True,
                         help="The input data dir")
@@ -141,7 +141,7 @@ def main(args):
     parser.add_argument("--multi_label_threshold", default=0.5, type=float,
                         help="Threshold using in case of label_type = M")
 
-    args = parser.parse_args(args)
+    args = parser.parse_args()
 
     if os.path.exists(args.output_dir) and os.listdir(
             args.output_dir) and args.do_train and not args.overwrite_output_dir:
@@ -309,32 +309,4 @@ def main(args):
 
 
 if __name__ == "__main__":
-    # main()
-    args = ['--data_dir=data/CG/',
-            # '--output_dir=out/zalo_qa/',
-            '--output_dir=out/CG/',
-            '--model_type=bert',
-            '--model_name_or_path=sources/pretrained_bert/abci_bert_radam/',
-            # '--no_cuda',
-            '--fp16',
-            '--do_train',
-            # '--do_eval',
-            # '--eval_all_checkpoints',
-            # '--do_predict',
-            # '--model_to_predict=out/zalo_qa/checkpoint-1000/',
-            # '--eval_measure=f1',
-            '--overwrite_output_dir',
-            '--per_gpu_train_batch_size=16',
-            '--per_gpu_eval_batch_size=16',
-            # '--cache_data',
-            '--load_cached_data',
-            # '--save_steps=100',
-            '--logging_steps=10',
-            '--evaluate_during_training',
-            # '--reduced_embedding_size=500',
-            '--use_last_subword',
-            '--gpu=0',
-            '--max_span_width=8',
-            '--label_type=M'
-            ]
-    main(args)
+    main()
