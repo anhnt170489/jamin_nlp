@@ -27,12 +27,12 @@ ALL_MODELS = sum(
 
 BIOSSES, BC5CDR, HOC, DDI, CHEMPROT, MEDNLI = 'biosses', 'bc5cdr', 'hoc', 'ddi', 'chemprot', 'mednli'
 
-CLASS_TYPES = {BIOSSES: (BiossesReader, BertSequenceClassification, PearsonAndSpearman),
-               BC5CDR: (BC5CDRReader, BertTokenClassification, AccAndF1Metrics),
-               HOC: (HOCReader, BertMultilabelClassification, AccAndF1Metrics),
-               DDI: (DDI2013Reader, BertSequenceClassification, AccAndF1Metrics),
-               CHEMPROT: (ChemProtReader, BertSequenceClassification, AccAndF1Metrics),
-               MEDNLI: (MedNLIReader, BertSequenceClassification, AccAndF1Metrics)
+CLASS_TYPES = {BIOSSES: (BiossesReader, BertSequenceClassification, PearsonAndSpearman()),
+               BC5CDR: (BC5CDRReader, BertTokenClassification, AccAndF1Metrics()),
+               HOC: (HOCReader, BertMultilabelClassification, AccAndF1Metrics()),
+               DDI: (DDI2013Reader, BertSequenceClassification, AccAndF1Metrics(average='macro')),
+               CHEMPROT: (ChemProtReader, BertSequenceClassification, AccAndF1Metrics()),
+               MEDNLI: (MedNLIReader, BertSequenceClassification, AccAndF1Metrics())
                }
 
 
@@ -204,7 +204,7 @@ def main():
     args.max_seq_length = min(args.max_seq_length, tokenizer.max_len_single_sentence)
     data_dir = args.data_dir
     args.corpus = args.corpus.lower()
-    reader_class, model_class, metrics_class = CLASS_TYPES[args.corpus]
+    reader_class, model_class, metrics = CLASS_TYPES[args.corpus]
 
     logger.info("Reading data")
     reader = reader_class(args)
@@ -270,7 +270,6 @@ def main():
     if args.do_train:
         logger.info("Start training")
         if args.evaluate_during_training:
-            metrics = metrics_class()
             global_step, tr_loss = Trainer.train(train_instances, model, args, eval_instances=dev_instances,
                                                  metrics=metrics)
         else:
@@ -282,9 +281,6 @@ def main():
         output_eval_file = os.path.join(args.output_dir, "eval_results.txt")
         command = 'rm ' + output_eval_file
         os.system(command)
-
-        # Prepare metrics
-        metrics = metrics_class()
 
         # Evaluation
         best_check_point = None

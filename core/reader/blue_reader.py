@@ -88,7 +88,8 @@ class BC5CDRReader(BLUEReader):
 
     def get_labels(self):
         """See base class."""
-        return ["O", "B-Chemical", "I-Chemical", "B-Disease", "I-Disease"]
+        # return ["O", "B-Chemical", "I-Chemical", "B-Disease", "I-Disease"]
+        return ["O", "B", "I"]
 
     def _create_text_instances(self, lines, set_type):
         """Creates examples for the training and dev sets."""
@@ -107,7 +108,7 @@ class BC5CDRReader(BLUEReader):
                 token_labels = []
             else:
                 tokens.append(line[0])
-                token_labels.append(line[1].split()[-1])
+                token_labels.append(line[1].split()[-1][0])
 
         return examples
 

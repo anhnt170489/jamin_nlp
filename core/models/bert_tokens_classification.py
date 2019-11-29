@@ -38,7 +38,7 @@ class BertTokenClassification(nn.Module):
 
         preds = f.softmax(logits, dim=-1).data
         preds = preds.argmax(dim=-1).view(-1)
-        active_indices = token_mask.view(-1) == -1
+        active_indices = token_mask.view(-1) == 1
         preds = preds.view(-1)[active_indices]
         preds = preds.detach().cpu().numpy()
         if labels is not None:
