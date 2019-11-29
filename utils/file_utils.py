@@ -16,7 +16,7 @@ def make_dirs(*paths):
     os.makedirs(norm_path(*paths), exist_ok=True)
 
 
-def cache_data(data, cache_dir, type=None, compress=9, protocol=None, cache_size=None):
+def cache_data(data, cache_dir, type=None, compress=0, protocol=None, cache_size=None):
     name_by_type = 'data' if type is None else (
         'train' if type == 'TRAIN' else ('dev' if type == 'DEV' else 'test'))
     cached_features_file = os.path.join(cache_dir, '{}.cached'.format(name_by_type))
