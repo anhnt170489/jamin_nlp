@@ -14,7 +14,7 @@ from utils import log_eval_result
 
 logger = logging.getLogger(__name__)
 
-from utils import cache_data, load_cached_data, handle_checkpoints
+from utils import cache_data, load_cached_data, make_dirs, handle_checkpoints
 
 from core.models import BertSequenceClassification, BertTokenClassification, BertMultilabelClassification
 from core.eval import AccAndF1Metrics, PearsonAndSpearman, Evaluator
@@ -160,6 +160,8 @@ def main():
         raise ValueError(
             "Output directory ({}) already exists and is not empty. Use --overwrite_output_dir to overcome.".format(
                 args.output_dir))
+
+    make_dirs(args.output_dir)
 
     # Setup distant debugging if needed
     if args.server_ip and args.server_port:
