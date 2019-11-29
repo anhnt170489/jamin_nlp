@@ -12,6 +12,7 @@ from tqdm import tqdm, trange
 from core.common import *
 from core.eval import Evaluator
 from core.meta import JaminDataset
+from core.processor import InstanceProcessor
 from libs import AdamW, get_linear_schedule_with_warmup
 from libs.opt import Lamb, RAdam, Ranger
 from utils import collate
@@ -66,7 +67,7 @@ class Trainer(object):
                             datefmt='%m/%d/%Y %H:%M:%S',
                             level=logging.INFO if args.local_rank in [-1, 0] else logging.WARN)
 
-        train_data = JaminDataset(data=train_instances, device=args.device)
+        train_data = JaminDataset(data=train_instances)
         if args.local_rank == -1:
             sampler = RandomSampler(train_data)
         else:
@@ -75,7 +76,7 @@ class Trainer(object):
         args.train_batch_size = batch_size
         iterator = trange(int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0])
         data_loader = DataLoader(dataset=train_data, sampler=sampler, batch_size=batch_size, collate_fn=collate,
-                                 pin_memory=True)
+                                 pin_memory=True, num_workers=5)
 
         if args.max_steps > 0:
             t_total = args.max_steps
@@ -150,7 +151,8 @@ class Trainer(object):
             for step, batch in enumerate(epoch_iterator):
                 model.train()
 
-                outputs = model(batch.data)
+                batch_data = InstanceProcessor.pin_memory_and_to_device(batch.data, device=args.device, pin_memory=True)
+                outputs = model(batch_data)
 
                 loss = outputs[LOSS]
 
