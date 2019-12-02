@@ -179,23 +179,46 @@ class BertTokenInstance(BertInstance):
         self.configs['use_all_subwords'] = args.use_all_subwords
         # reservation
         self.configs['mask_padding_with_zero'] = True
+        token_masks = []
+        subword_tokens = []
+        subtoken_labels = []
+        for i, token in enumerate(self.tokens):
+            subtokens = self.tokenizer.tokenize((token))
+            subword_tokens.extend(subtokens)
+            if token_labels:
+                label = token_labels[i]
 
-        if self.configs['use_all_subwords']:
-            import functools, operator
-            subword_tokens = [self.tokenizer.tokenize((token)) for token in self.tokens]
-            subword_tokens = functools.reduce(operator.iconcat, subword_tokens, [])
-        elif self.configs['use_last_subword']:
-            subword_tokens = [self.tokenizer.tokenize((token))[-1] for token in self.tokens]
-        else:
-            subword_tokens = [self.tokenizer.tokenize((token))[0] for token in self.tokens]
+            if self.configs['use_last_subword']:
+                sub_tokens_mask = [0] * len(subtokens)
+                sub_tokens_mask[-1] = 1
+                if token_labels:
+                    subtoken_label = [-1] * len(subtokens)
+                    subtoken_label[-1] = label
+            elif self.configs['use_last_subword']:
+                sub_tokens_mask = [0] * len(subtokens)
+                sub_tokens_mask[0] = 1
+                if token_labels:
+                    subtoken_label = [-1] * len(subtokens)
+                    subtoken_label[0] = label
+            else:
+                sub_tokens_mask = [1] * len(subtokens)
+                if token_labels:
+                    subtoken_label = [label] * len(subtokens)
+
+            token_masks.extend(sub_tokens_mask)
+            if token_labels:
+                subtoken_labels.extend(subtoken_label)
+
+        if token_labels:
+            token_labels = subtoken_labels
 
         # Account for [CLS] and [SEP] with "- 2"
         special_tokens_count = 2
         if len(subword_tokens) > self.configs['max_seq_length'] - special_tokens_count:
             subword_tokens = subword_tokens[:(self.configs['max_seq_length'] - special_tokens_count)]
+            token_masks = token_masks[:(self.configs['max_seq_length'] - special_tokens_count)]
             if token_labels:
                 token_labels = token_labels[:(self.configs['max_seq_length'] - special_tokens_count)]
-        token_masks = [1] * len(subword_tokens)
 
         sep_token = self.tokenizer.sep_token
         subword_tokens = subword_tokens + [sep_token]
