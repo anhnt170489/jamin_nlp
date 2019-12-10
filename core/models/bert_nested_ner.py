@@ -62,7 +62,7 @@ class BertNestedNER(nn.Module):
 
         # Retrieve sequence masks to remove tokens padded
         # sequence_mask = util.get_text_field_mask(tokens) > 0  # (B, S)
-        sequence_mask = tokens[BERT_INPUT_MASKS] > 0
+        sequence_mask = tokens[BERT_TOKEN_MASKS] > 0
 
         # Remove token embeddings at padded positions
         sequence_embeddings = sequence_embeddings[sequence_mask]  # (S', H)
