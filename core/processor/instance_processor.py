@@ -34,7 +34,7 @@ class InstanceProcessor(object):
     def pad(instances, fix_padding_length=None):
         batch = {}
         for instance in instances:
-            for k, v in instance.data.items():
+            for k, v in instance.items():
                 if k not in batch:
                     batch[k] = []
                 batch[k].append(v)
@@ -76,3 +76,12 @@ class InstanceProcessor(object):
                         print("Can't padding", k)
 
         return batch
+
+
+class InstanceBatchProcessor(object):
+    def __init__(self, args, fix_padding_length=None):
+        self.args = args
+        self.fix_padding_length = fix_padding_length
+
+    def collate(self, batch):
+        return InstanceProcessor.pad(batch, fix_padding_length=self.fix_padding_length)

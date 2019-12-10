@@ -9,8 +9,7 @@ from tqdm import tqdm
 
 from core.common import *
 from core.meta import JaminDataset
-from core.processor import InstanceProcessor
-from utils import collate
+from core.processor import InstanceProcessor, InstanceBatchProcessor
 
 logger = logging.getLogger(__name__)
 
@@ -38,8 +37,9 @@ class Evaluator(object):
         sampler = SequentialSampler(eval_data)
         batch_size = args.per_gpu_eval_batch_size * max(1, args.n_gpu)
         args.eval_batch_size = batch_size
-        data_loader = DataLoader(dataset=eval_data, sampler=sampler, batch_size=batch_size, collate_fn=collate,
-                                 pin_memory=True, num_workers=3)
+        batch_processor = InstanceBatchProcessor(args)
+        data_loader = DataLoader(dataset=eval_data, sampler=sampler, batch_size=batch_size,
+                                 collate_fn=batch_processor.collate, pin_memory=True, num_workers=3)
 
         if predict:
             if args.fp16:
@@ -78,7 +78,7 @@ class Evaluator(object):
             model.eval()
             with torch.no_grad():
 
-                batch_data = InstanceProcessor.pin_memory_and_to_device(batch.data, device=args.device, pin_memory=True)
+                batch_data = InstanceProcessor.pin_memory_and_to_device(batch, device=args.device, pin_memory=True)
                 outputs = model(batch_data)
 
                 if args.ignored_labels:
