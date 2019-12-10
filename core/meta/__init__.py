@@ -9,5 +9,6 @@ from .base_instances import MultiLabelInstance
 from .base_instances import SequenceInstance
 from .base_instances import SpanInstance
 from .dataset import JaminDataset
+from .meta import GLUEInstance
 from .meta import NERInstance
 from .meta import QAInstance
