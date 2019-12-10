@@ -1,7 +1,7 @@
 import numpy as np
 from beautifultable import BeautifulTable
 from scipy.stats import pearsonr, spearmanr
-from sklearn.metrics import f1_score
+from sklearn.metrics import matthews_corrcoef, f1_score
 
 from core.common import PRINT
 
@@ -90,6 +90,9 @@ class Metrics(object):
 
 
 class AccAndF1Metrics(Metrics):
+    def __init__(self, average='micro', acc_only=False):
+        self.average = average
+        self.acc_only = acc_only
 
     def compute(self, preds, golds):
         _preds = None
@@ -103,12 +106,15 @@ class AccAndF1Metrics(Metrics):
                 _golds = np.append(batch_golds, _golds, axis=0)
 
         acc = AccAndF1Metrics.simple_accuracy(_preds, _golds)
-        f1 = f1_score(y_true=_golds, y_pred=_preds, average='micro')
-        return {
-            "acc": acc,
-            "f1": f1,
-            "acc_and_f1": (acc + f1) / 2,
-        }
+        if not self.acc_only:
+            f1 = f1_score(y_true=_golds, y_pred=_preds, average=self.average)
+            return {
+                "acc": acc,
+                "f1": f1,
+                "acc_and_f1": (acc + f1) / 2,
+            }
+        else:
+            return {"acc": acc}
 
     @staticmethod
     def simple_accuracy(preds, labels):
@@ -154,6 +160,24 @@ class PearsonAndSpearman(Metrics):
             "spearmanr": spearman_corr,
             "corr": (pearson_corr + spearman_corr) / 2,
             PRINT: to_print
+        }
+
+
+class MatthewsCorrcoef(Metrics):
+
+    def compute(self, preds, golds):
+        _preds = None
+        _golds = None
+        for batch_predicts, batch_golds in zip(preds, golds):
+            if _preds is None:
+                _preds = batch_predicts
+                _golds = batch_golds
+            else:
+                _preds = np.append(batch_predicts, _preds, axis=0)
+                _golds = np.append(batch_golds, _golds, axis=0)
+
+        return {
+            "mcc": matthews_corrcoef(_golds, _preds)
         }
 
 

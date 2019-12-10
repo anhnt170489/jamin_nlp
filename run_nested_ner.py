@@ -1,27 +1,26 @@
 import argparse
+import glob
 import logging
 import os
 import random
 
 import numpy as np
 import torch
-
-from core.common import *
-from core.eval import SQUADMetrics, SQUADPredictWriter
-from core.meta import SQUADResult
-from core.models import BertQuestionAnswering
-from core.reader import SQUADReader
+from core.eval import Evaluator
+from core.eval import SpanClassificationMetrics
+from core.reader import CGReader
 from core.training import Trainer
-from libs import BertTokenizer, RobertaTokenizer
-from utils import log_eval_result
+from libs import BertTokenizer, BertConfig, RobertaConfig
 
 logger = logging.getLogger(__name__)
+# from task_prepare import BERTNestedNERPrepare
+from core.models import BertNestedNER
 
-from utils import cache_data, load_cached_data, make_dirs, handle_checkpoints
+from utils import cache_data, load_cached_data, handle_checkpoints
 
-from core.eval import Evaluator
-
-import glob
+ALL_MODELS = sum(
+    (tuple(conf.pretrained_config_archive_map.keys()) for conf in (BertConfig, RobertaConfig)),
+    ())
 
 
 def set_seed(args):
@@ -43,10 +42,6 @@ def main():
     ## Training parameter
     parser.add_argument("--do_train", action='store_true',
                         help="Whether to run training.")
-    parser.add_argument("--pretrained_model", default=None, type=str,
-                        help="Path to pre-trained qa model ")
-    parser.add_argument("--models_to_ensemble", default=None, type=str,
-                        help="Path to pre-trained qa model ")
     parser.add_argument("--do_eval", action='store_true',
                         help="Whether to run eval on the dev set.")
     parser.add_argument("--do_predict", action='store_true',
@@ -120,9 +115,10 @@ def main():
 
     ## Model specific parameters
     parser.add_argument("--model_type", default=None, type=str, required=True,
-                        help="Model type selected in the list: bert,roberta")
+                        help="Model type selected in the list: bert, roberta")
     parser.add_argument("--model_name_or_path", default=None, type=str, required=True,
-                        help="Path to pre-trained bert/roberta model or shortcut name")
+                        help="Path to pre-trained model or shortcut name selected in the list: " + ", ".join(
+                            ALL_MODELS))
     parser.add_argument("--config_name", default="", type=str,
                         help="Pretrained config name or path if not the same as model_name")
     parser.add_argument("--tokenizer_name", default="", type=str,
@@ -130,7 +126,8 @@ def main():
     parser.add_argument("--max_seq_length", default=128, type=int,
                         help="The maximum total input sequence length after tokenization. Sequences longer "
                              "than this will be truncated, sequences shorter will be padded.")
-
+    parser.add_argument("--max_span_width", default=8, type=int,
+                        help="The maximum width for a span. Using for the models calculating on span")
     parser.add_argument("--do_lower_case", action='store_true',
                         help="Set this flag if you are using an uncased model.")
     parser.add_argument("--use_last_subword", action='store_true',
@@ -138,23 +135,10 @@ def main():
                              "If not, the first subword will be choosen")
     parser.add_argument("--use_all_subwords", action='store_true',
                         help="Set this flag if you choose all the subwords to present the word. ")
-    parser.add_argument('--version_2_with_negative', action='store_true',
-                        help='If true, the SQuAD examples contain some that do not have an answer.')
-    parser.add_argument("--max_query_length", default=64, type=int,
-                        help="The maximum number of tokens for the question. Questions longer than this will "
-                             "be truncated to this length.")
-    parser.add_argument("--max_answer_length", default=30, type=int,
-                        help="The maximum length of an answer that can be generated. This is needed because the start "
-                             "and end predictions are not conditioned on one another.")
-    parser.add_argument("--doc_stride", default=128, type=int,
-                        help="When splitting up a long document into chunks, how much stride to take between chunks.")
-    parser.add_argument("--n_best_size", default=20, type=int,
-                        help="The total number of n-best predictions to generate in the nbest_predictions.json output file.")
-    parser.add_argument("--verbose_logging", action='store_true',
-                        help="If true, all of the warnings related to data processing will be printed. "
-                             "A number of warnings are expected for a normal SQuAD evaluation.")
-    parser.add_argument('--null_score_diff_threshold', type=float, default=0.0,
-                        help="If null_score - best_non_null is greater than the threshold predict null.")
+    parser.add_argument("--label_type", default='S', type=str,
+                        help="S: Singly labeled, M: Multiply labeled")
+    parser.add_argument("--multi_label_threshold", default=0.5, type=float,
+                        help="Threshold using in case of label_type = M")
 
     args = parser.parse_args()
 
@@ -163,8 +147,6 @@ def main():
         raise ValueError(
             "Output directory ({}) already exists and is not empty. Use --overwrite_output_dir to overcome.".format(
                 args.output_dir))
-
-    make_dirs(args.output_dir)
 
     # Setup distant debugging if needed
     if args.server_ip and args.server_port:
@@ -175,26 +157,21 @@ def main():
         ptvsd.enable_attach(address=(args.server_ip, args.server_port), redirect_output=True)
         ptvsd.wait_for_attach()
 
-    if args.local_rank >= 0:
-        torch.cuda.set_device(args.local_rank)
-        args.device = torch.device("cuda", args.local_rank)
-        torch.distributed.init_process_group(backend='nccl')
-        args.n_gpu = 1
+    if args.gpu >= 0:
+        device = torch.device("cuda:" + str(args.gpu) if torch.cuda.is_available() else "cpu")
+        # ADD BY LONG
+        torch.cuda.set_device(args.gpu)
     else:
-        if args.gpu >= 0:
-            args.device = torch.device("cuda:" + str(args.gpu) if torch.cuda.is_available() else "cpu")
-            torch.cuda.set_device(args.gpu)
-            args.n_gpu = 1
-        else:
-            args.device = torch.device("cpu")
-            args.n_gpu = 0
+        device = torch.device("cpu")
+    args.device = device
+    args.n_gpu = 1
 
     # Setup logging
     logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
                         datefmt='%m/%d/%Y %H:%M:%S',
                         level=logging.INFO if args.local_rank in [-1, 0] else logging.WARN)
     logger.warning("Process rank: %s, device: %s, n_gpu: %s, distributed training: %s, 16-bits training: %s",
-                   args.local_rank, args.device, args.n_gpu, bool(args.local_rank != -1), args.fp16)
+                   args.local_rank, device, args.n_gpu, bool(False), args.fp16)
 
     # Set seed
     set_seed(args)
@@ -203,21 +180,14 @@ def main():
     if args.local_rank not in [-1, 0]:
         torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
 
-    if args.model_type == 'roberta':
-        tokenizer_cls = RobertaTokenizer
-    elif args.model_type == 'bert':
-        tokenizer_cls = BertTokenizer
-
-    tokenizer = tokenizer_cls.from_pretrained(args.model_name_or_path)
+    tokenizer = BertTokenizer.from_pretrained(args.model_name_or_path)
     if args.max_seq_length <= 0:
         args.max_seq_length = tokenizer.max_len_single_sentence  # Our input block size will be the max possible for the model
     args.max_seq_length = min(args.max_seq_length, tokenizer.max_len_single_sentence)
     data_dir = args.data_dir
 
     logger.info("Reading data")
-    reader = SQUADReader(args)
-    args.labels = reader.get_labels()
-    args.ignored_labels = None
+    reader = CGReader(tokenizer, args)
 
     if args.do_train:
         train_instances = None
@@ -229,7 +199,6 @@ def main():
                 cache_data(train_instances, type='TRAIN', cache_dir=data_dir, compress=None)
 
     if args.do_eval or (args.do_train and args.evaluate_during_training):
-        args.predict_file = os.path.join(data_dir, "dev.json")
         dev_instances = None
         if args.load_cached_data:
             dev_instances = load_cached_data(data_dir, type='DEV')
@@ -247,26 +216,23 @@ def main():
             if args.cache_data:
                 cache_data(test_instances, type='TEST', cache_dir=data_dir)
 
+    args.labels = reader.get_labels()
+    args.ignored_labels = None
+
     logger.info("Preparing the model")
-    model = BertQuestionAnswering(args)
+
+    model = BertNestedNER(args)
+
     if args.local_rank == 0:
         torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
 
     model.to(args.device)
 
-    if args.pretrained_model:
-        handle_checkpoints(model=model,
-                           checkpoint_dir=args.pretrained_qa_model,
-                           params={
-                               'device': args.device
-                           },
-                           resume=True)
-
     # Training
     if args.do_train:
         logger.info("Start training")
         if args.evaluate_during_training:
-            metrics = SQUADMetrics(args)
+            metrics = SpanClassificationMetrics(args.labels)
             global_step, tr_loss = Trainer.train(train_instances, model, args, eval_instances=dev_instances,
                                                  metrics=metrics)
         else:
@@ -280,10 +246,11 @@ def main():
         os.system(command)
 
         # Prepare metrics
-        metrics = SQUADMetrics(args)
+        metrics = SpanClassificationMetrics(args.labels)
 
         # Evaluation
         best_check_point = None
+        best_result = None
         best_score = -float('inf')
         results = {}
         if args.local_rank in [-1, 0]:
@@ -305,64 +272,22 @@ def main():
                 result = Evaluator.evaluate(dev_instances, model, args, metrics=metrics)
                 if args.eval_measure in result and result[args.eval_measure] > best_score:
                     best_score = result[args.eval_measure]
-                    result[BEST_STEP] = global_step
+                    best_result = result
+                    best_result['step'] = global_step
                     best_check_point = checkpoint
-                else:
-                    result[STEP] = global_step
                 result = dict((k + '_{}'.format(global_step), v) for k, v in result.items())
                 results.update(result)
 
-                # Write result
-                log_eval_result(result, output_eval_file)
-
-    if args.do_predict:
-        if args.models_to_ensemble:
-            from utils import ensemble_models
-            ensemble_models(model=model,
-                            models_to_ensemble_dir=args.models_to_ensemble,
-                            params={
-                                'device': args.device
-                            })
-        else:
-            checkpoint = args.model_to_predict
-            if not checkpoint:
-                if args.do_eval and best_check_point is not None:
-                    logger.info("There's no model to predict, the best checkpoint when evaluating will be used")
-                    checkpoint = best_check_point
-
-            assert checkpoint, ('No model to predict')
-            logger.info("Predict the following checkpoints: %s", checkpoint)
-            handle_checkpoints(model=model,
-                               checkpoint_dir=checkpoint,
-                               params={
-                                   'device': args.device
-                               },
-                               resume=True)
-
-        preds = Evaluator.evaluate(test_instances, model, args, predict=True)
-
-        all_results = []
-        all_contents = []
-        for batch_predicts in preds:
-            for unique_id, start_logits, end_logits, contents in zip(batch_predicts[0], batch_predicts[1],
-                                                                     batch_predicts[2], batch_predicts[3]):
-                result = SQUADResult(unique_id=unique_id,
-                                     start_logits=start_logits,
-                                     end_logits=end_logits)
-                all_results.append(result)
-                all_contents.append(contents)
-
-        output_prediction_file = os.path.join(args.output_dir, "predictions.json")
-        output_nbest_file = os.path.join(args.output_dir, "nbest_predictions.json")
-        if args.version_2_with_negative:
-            output_null_log_odds_file = os.path.join(args.output_dir, "null_odds.json")
-        else:
-            output_null_log_odds_file = None
-        SQUADPredictWriter.write({"results": all_results, "contents": all_contents},
-                                 {"output_prediction_file": output_prediction_file,
-                                  "output_nbest_file": output_nbest_file,
-                                  "output_null_log_odds_file": output_null_log_odds_file}
-                                 , args)
+            # Write best result
+            if best_result:
+                with open(output_eval_file, "a+") as writer:
+                    logger.info("***** Best result at step {} *****".format(best_result['step']))
+                    writer.write("***** Best result at step {} *****\n".format(best_result['step']))
+                    for key in sorted(best_result.keys()):
+                        if key != 'step':
+                            logger.info("  %s = %s", key, str(best_result[key]))
+                            writer.write("%s = %s\n" % (key, str(best_result[key])))
+                    writer.write('\n')
 
 
 if __name__ == "__main__":
