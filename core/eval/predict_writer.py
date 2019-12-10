@@ -1,6 +1,5 @@
 import collections
 import logging
-import os
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
                     datefmt='%m/%d/%Y %H:%M:%S',
@@ -336,14 +335,10 @@ class SQUADPredictWriter(PredictWriter):
             all_nbest_json[qas_id] = nbest_json
 
         from utils import dump_json
-        with open(output_prediction_file, "w") as writer:
-            writer.write(dump_json(all_predictions, indent=4) + "\n")
-
-        with open(output_nbest_file, "w") as writer:
-            writer.write(dump_json(all_nbest_json, indent=4) + "\n")
+        dump_json(all_predictions, out_file=output_prediction_file, indent=4)
+        dump_json(all_nbest_json, out_file=output_nbest_file, indent=4)
 
         if args.version_2_with_negative:
-            with open(output_null_log_odds_file, "w") as writer:
-                writer.write(dump_json(scores_diff_json, indent=4) + "\n")
+            dump_json(scores_diff_json, out_file=output_null_log_odds_file, indent=4)
 
         return all_predictions
