@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
-from .cg_reader import CGReader
 from .json_data_reader import JsonDataReader
+from .squad_reader import SQUADReader
 from .standoff_data_reader import StandoffDataReader
 from .tsv_data_reader import TSVDataReader
-from .squad_reader import SQUADReader
