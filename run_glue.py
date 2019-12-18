@@ -5,6 +5,7 @@ import random
 
 import numpy as np
 import torch
+
 from core.common import *
 from core.reader import ColaReader, MnliReader, MnliMismatchedReader, MrpcReader, QnliReader, QqpReader, RteReader, \
     Sst2Reader, StsbReader, WnliReader
@@ -26,7 +27,7 @@ ALL_MODELS = sum(
     ())
 
 COLA, MNLI, MNLI_MM, MRPC, QNLI, QQP, RTE, SST2, STSB, WNLI = \
-    'cola', 'mnli', 'mnli-mm', 'mrpc', 'qnli', 'qqp', 'rte', 'snli', 'sst-2', 'sts-b', 'wnli', 'diagnostic'
+    'cola', 'mnli', 'mnli-mm', 'mrpc', 'qnli', 'qqp', 'rte', 'sst-2', 'sts-b', 'wnli'
 
 CLASS_TYPES = {COLA: (ColaReader, BertSequenceClassification, MatthewsCorrcoef(), 'mcc'),
                MNLI: (MnliReader, BertSequenceClassification, AccAndF1Metrics(acc_only=True), 'acc'),
