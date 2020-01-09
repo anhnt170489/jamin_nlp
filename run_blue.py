@@ -21,6 +21,8 @@ from core.eval import AccAndF1Metrics, PearsonAndSpearman, Evaluator
 
 import glob
 
+from core.eval import ChemprotMetrics
+
 ALL_MODELS = sum(
     (tuple(conf.pretrained_config_archive_map.keys()) for conf in (BertConfig, RobertaConfig)),
     ())
@@ -31,7 +33,10 @@ CLASS_TYPES = {BIOSSES: (BiossesReader, BertSequenceClassification, PearsonAndSp
                BC5CDR: (BC5CDRReader, BertTokenClassification, AccAndF1Metrics()),
                HOC: (HOCReader, BertMultilabelClassification, AccAndF1Metrics()),
                DDI: (DDI2013Reader, BertSequenceClassification, AccAndF1Metrics(average='macro')),
-               CHEMPROT: (ChemProtReader, BertSequenceClassification, AccAndF1Metrics()),
+               # CHEMPROT: (ChemProtReader, BertSequenceClassification, AccAndF1Metrics()),
+               CHEMPROT: (
+                   ChemProtReader, BertSequenceClassification,
+                   ChemprotMetrics(labels=ChemProtReader(None).get_labels())),
                MEDNLI: (MedNLIReader, BertSequenceClassification, AccAndF1Metrics())
                }
 
@@ -245,8 +250,8 @@ def main():
         ignored_labels = ['O']
     elif args.corpus == DDI:
         ignored_labels = ['DDI-false']
-    elif args.corpus == CHEMPROT:
-        ignored_labels = ['false']
+    # elif args.corpus == CHEMPROT:
+    #     ignored_labels = ['false']
 
     if ignored_labels:
         ignored_labels = [args.labels.index(ignored_label) for ignored_label in ignored_labels]
