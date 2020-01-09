@@ -110,6 +110,13 @@ class BC5CDRReader(BLUEReader):
                 tokens.append(line[0])
                 token_labels.append(line[1].split()[-1][0])
 
+        # last sample
+        if len(tokens) > 0:
+            guid = "%s-%s" % (set_type, idx)
+            text_b = None
+            examples.append(
+                BLUEInstance(guid=guid, text_a=tokens, text_b=text_b, label=token_labels))
+
         return examples
 
     def _create_instances(self, lines, set_type):
