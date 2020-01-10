@@ -117,7 +117,7 @@ class BC5CDRReader(BLUEReader):
                 token_labels = []
             else:
                 tokens.append(line[0])
-                token_labels.append(line[1].split()[-1][0])
+                token_labels.append(line[3].split()[-1][0])
 
         # last sample
         if len(tokens) > 0:
