@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 import torch.nn as nn
 
@@ -52,7 +53,7 @@ class BertMultilabelClassification(nn.Module):
                 else:
                     flat_preds.append([0])
 
-        return flat_preds, flat_label_ids
+        return np.array(flat_preds), np.array(flat_label_ids)
 
     def forward(self, batch):
         tokens = batch['tokens']

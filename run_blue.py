@@ -7,7 +7,7 @@ import numpy as np
 import torch
 
 from core.common import *
-from core.reader import BiossesReader, BC5CDRReader, DDI2013Reader, ChemProtReader, HOCReader, MedNLIReader
+from core.reader import BiossesReader, BC5CDRReader, DDI2013Reader, HOCReader, MedNLIReader, ChemProtReader
 from core.training import Trainer
 from libs import BertTokenizer, BertConfig, RobertaConfig
 from utils import log_eval_result
@@ -17,11 +17,11 @@ logger = logging.getLogger(__name__)
 from utils import cache_data, load_cached_data, make_dirs, handle_checkpoints
 
 from core.models import BertSequenceClassification, BertTokenClassification, BertMultilabelClassification
-from core.eval import AccAndF1Metrics, PearsonAndSpearman, Evaluator
+from core.eval import PearsonAndSpearman, Evaluator
 
 import glob
 
-from core.eval import ChemprotMetrics
+from core.eval.blue_metrics import AccAndF1Metrics
 
 ALL_MODELS = sum(
     (tuple(conf.pretrained_config_archive_map.keys()) for conf in (BertConfig, RobertaConfig)),
@@ -30,14 +30,21 @@ ALL_MODELS = sum(
 BIOSSES, BC5CDR, HOC, DDI, CHEMPROT, MEDNLI = 'biosses', 'bc5cdr', 'hoc', 'ddi', 'chemprot', 'mednli'
 
 CLASS_TYPES = {BIOSSES: (BiossesReader, BertSequenceClassification, PearsonAndSpearman()),
-               BC5CDR: (BC5CDRReader, BertTokenClassification, AccAndF1Metrics()),
-               HOC: (HOCReader, BertMultilabelClassification, AccAndF1Metrics()),
-               DDI: (DDI2013Reader, BertSequenceClassification, AccAndF1Metrics(average='macro')),
-               # CHEMPROT: (ChemProtReader, BertSequenceClassification, AccAndF1Metrics()),
+               BC5CDR: (BC5CDRReader, BertTokenClassification, AccAndF1Metrics(labels=BC5CDRReader(None).get_labels(),
+                                                                               ignore_labels=BC5CDRReader(
+                                                                                   None).get_ignored_labels())),
+               HOC: (HOCReader, BertMultilabelClassification,
+                     AccAndF1Metrics(labels=['None'] + HOCReader(None).get_labels())),
+               DDI: (DDI2013Reader, BertSequenceClassification, AccAndF1Metrics(labels=DDI2013Reader(None).get_labels(),
+                                                                                ignore_labels=DDI2013Reader(
+                                                                                    None).get_ignored_labels(),
+                                                                                macro=True, micro=False)),
                CHEMPROT: (
                    ChemProtReader, BertSequenceClassification,
-                   ChemprotMetrics(labels=ChemProtReader(None).get_labels())),
-               MEDNLI: (MedNLIReader, BertSequenceClassification, AccAndF1Metrics())
+                   AccAndF1Metrics(labels=ChemProtReader(None).get_labels(),
+                                   ignore_labels=ChemProtReader(None).get_ignored_labels())),
+               MEDNLI: (
+                   MedNLIReader, BertSequenceClassification, AccAndF1Metrics(labels=MedNLIReader(None).get_labels()))
                }
 
 
@@ -246,10 +253,10 @@ def main():
 
     # Task specific args
     ignored_labels = None
-    if args.corpus == BC5CDR:
-        ignored_labels = ['O']
-    elif args.corpus == DDI:
-        ignored_labels = ['DDI-false']
+    # if args.corpus == BC5CDR:
+    #     ignored_labels = ['O']
+    # elif args.corpus == DDI:
+    #     ignored_labels = ['DDI-false']
     # elif args.corpus == CHEMPROT:
     #     ignored_labels = ['false']
 

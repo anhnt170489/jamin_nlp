@@ -1,25 +1,16 @@
-import numpy as np
-
 from libs.blue.ext import pmetrics
 from .metrics import Metrics
 
 
-class ChemprotMetrics(Metrics):
-    def __init__(self, labels, average='micro', acc_only=False, ):
-        self.average = average
+class AccAndF1Metrics(Metrics):
+    def __init__(self, labels, ignore_labels=None, macro=False, micro=True, acc_only=False, ):
         self.acc_only = acc_only
         self.labels = labels
+        self.ignore_labels = ignore_labels
+        self.macro = macro
+        self.micro = micro
 
     def compute(self, preds, golds):
-        _preds = None
-        _golds = None
-        for batch_predicts, batch_golds in zip(preds, golds):
-            if _preds is None:
-                _preds = batch_predicts
-                _golds = batch_golds
-            else:
-                _preds = np.append(batch_predicts, _preds, axis=0)
-                _golds = np.append(batch_golds, _golds, axis=0)
 
         _preds = []
         _golds = []
@@ -27,8 +18,13 @@ class ChemprotMetrics(Metrics):
             _preds.extend(batch_predicts.tolist())
             _golds.extend(batch_golds.tolist())
 
-        result = pmetrics.classification_report(_golds, _preds, macro=False,
-                                                micro=True, classes_=self.labels)
-        subindex = [i for i in range(len(self.labels)) if self.labels[i] != 'false']
-        result = result.sub_report(subindex, macro=False, micro=True)
-        return {'f1': result.overall_acc.tolist()}
+        result = pmetrics.classification_report(_golds, _preds, macro=self.macro,
+                                                micro=self.micro, classes_=self.labels)
+        if self.ignore_labels:
+            subindex = [i for i in range(len(self.labels)) if self.labels[i] not in self.ignore_labels]
+            result = result.sub_report(subindex, macro=self.macro, micro=self.micro)
+        # return {'f1': result.overall_acc.tolist()}
+        return {'precision': float(result.table['Precision'].tolist()[-1]),
+                'recall': float(result.table['Recall'].tolist()[-1]),
+                'f1': float(result.table['F-score'].tolist()[-1]),
+                'acc': float(result.table['Accuracy'].tolist()[-1])}

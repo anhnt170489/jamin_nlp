@@ -21,6 +21,12 @@ class BLUEReader(TSVDataReader):
         super().__init__()
         self.args = args
 
+    def get_labels(self):
+        return None
+
+    def get_ignored_labels(self):
+        return None
+
     def get_train_examples(self, data_dir, *args):
         """See base class."""
         return self._create_instances(
@@ -90,6 +96,9 @@ class BC5CDRReader(BLUEReader):
         """See base class."""
         # return ["O", "B-Chemical", "I-Chemical", "B-Disease", "I-Disease"]
         return ["O", "B", "I"]
+
+    def get_ignored_labels(self):
+        return ["O"]
 
     def _create_text_instances(self, lines, set_type):
         """Creates examples for the training and dev sets."""
@@ -180,6 +189,9 @@ class DDI2013Reader(BLUEReader):
     def get_labels(self):
         return ["DDI-advise", "DDI-effect", "DDI-int", "DDI-mechanism", 'DDI-false']
 
+    def get_ignored_labels(self):
+        return ['DDI-false']
+
     @property
     def label_map(self):
         return {label: i for i, label in enumerate(self.get_labels())}
@@ -226,6 +238,9 @@ class ChemProtReader(BLUEReader):
 
     def get_labels(self):
         return ["CPR:3", "CPR:4", "CPR:5", "CPR:6", "CPR:9", "false"]
+
+    def get_ignored_labels(self):
+        return ["false"]
 
     @property
     def label_map(self):
