@@ -24,9 +24,11 @@ import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from libs.transformers.transformers.modeling_bert import BertEmbeddings, BertLayerNorm, BertModel, BertPreTrainedModel, gelu
-from libs.transformers.transformers.configuration_roberta import RobertaConfig
-from libs.transformers.transformers.file_utils import add_start_docstrings
+from libs.transformers.src.transformers.configuration_roberta import RobertaConfig
+from libs.transformers.src.transformers.file_utils import add_start_docstrings
+from libs.transformers.src.transformers.modeling_bert import BertEmbeddings, BertLayerNorm, BertModel, \
+    BertPreTrainedModel, \
+    gelu
 
 logger = logging.getLogger(__name__)
 
