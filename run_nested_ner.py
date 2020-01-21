@@ -6,20 +6,26 @@ import random
 
 import numpy as np
 import torch
+
 from core.eval import Evaluator
 from core.eval import SpanClassificationMetrics
-from core.reader import CGReader
+from core.reader import CGReader, SciERCReader
 from core.training import Trainer
 from libs import BertTokenizer, BertConfig, RobertaConfig
 
 logger = logging.getLogger(__name__)
 from core.models import BertNestedNER
 
-from utils import cache_data, load_cached_data, handle_checkpoints
+from utils import cache_data, load_cached_data, handle_checkpoints, make_dirs
 
 ALL_MODELS = sum(
     (tuple(conf.pretrained_config_archive_map.keys()) for conf in (BertConfig, RobertaConfig)),
     ())
+
+CG, SCIERC = 'cg', 'scierc'
+CLASS_TYPES = {CG: (CGReader, 'M'),  # "S: Singly labeled, M: Multiply labeled"
+               SCIERC: (SciERCReader, 'S'),
+               }
 
 
 def set_seed(args):
@@ -134,10 +140,12 @@ def main():
                              "If not, the first subword will be choosen")
     parser.add_argument("--use_all_subwords", action='store_true',
                         help="Set this flag if you choose all the subwords to present the word. ")
-    parser.add_argument("--label_type", default='S', type=str,
-                        help="S: Singly labeled, M: Multiply labeled")
+    # parser.add_argument("--label_type", default='S', type=str,
+    #                     help="S: Singly labeled, M: Multiply labeled")
     parser.add_argument("--multi_label_threshold", default=0.5, type=float,
                         help="Threshold using in case of label_type = M")
+    parser.add_argument("--corpus", default=None, type=str, required=True,
+                        help="The data sets to train selected in the list: " + ", ".join(CLASS_TYPES.keys()))
 
     args = parser.parse_args()
 
@@ -146,6 +154,8 @@ def main():
         raise ValueError(
             "Output directory ({}) already exists and is not empty. Use --overwrite_output_dir to overcome.".format(
                 args.output_dir))
+
+    make_dirs(args.output_dir)
 
     # Setup distant debugging if needed
     if args.server_ip and args.server_port:
@@ -186,7 +196,10 @@ def main():
     data_dir = args.data_dir
 
     logger.info("Reading data")
-    reader = CGReader(tokenizer, args)
+    args.corpus = args.corpus.lower()
+    reader_class, label_type = CLASS_TYPES[args.corpus]
+    args.label_type = label_type
+    reader = reader_class(args)
 
     if args.do_train:
         train_instances = None
@@ -218,6 +231,11 @@ def main():
     args.labels = reader.get_labels()
     args.ignored_labels = None
 
+    eval_labels = args.labels.copy()
+    if args.corpus == 'scierc':
+        eval_labels.pop(eval_labels.index('None'))
+    metrics = SpanClassificationMetrics(eval_labels)
+
     logger.info("Preparing the model")
 
     model = BertNestedNER(args)
@@ -231,7 +249,6 @@ def main():
     if args.do_train:
         logger.info("Start training")
         if args.evaluate_during_training:
-            metrics = SpanClassificationMetrics(args.labels)
             global_step, tr_loss = Trainer.train(train_instances, model, args, eval_instances=dev_instances,
                                                  metrics=metrics)
         else:
@@ -243,9 +260,6 @@ def main():
         output_eval_file = os.path.join(args.output_dir, "eval_results.txt")
         command = 'rm ' + output_eval_file
         os.system(command)
-
-        # Prepare metrics
-        metrics = SpanClassificationMetrics(args.labels)
 
         # Evaluation
         best_check_point = None
