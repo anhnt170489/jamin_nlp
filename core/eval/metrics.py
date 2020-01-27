@@ -190,6 +190,11 @@ class SpanClassificationMetrics(Metrics):
         self.overall_score = SpanClassificationFscore(labels=labels, beta=beta)
 
     def compute(self, preds, golds):
+        # Clear last results:
+        for label in self._labels:
+            self.single_scores[label].clear()
+        self.overall_score.clear()
+
         for batch_predicts, batch_golds in zip(preds, golds):
             for sentence_index in range(len(batch_golds)):
                 for label in self._labels:
