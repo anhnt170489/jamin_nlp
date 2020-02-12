@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 from utils import cache_data, load_cached_data, make_dirs, handle_checkpoints
 
-from core.models import BertSequenceClassification
+from core.models import BertSequenceClassification, VCTransSequenceClassification
 from core.eval import MatthewsCorrcoef, AccAndF1Metrics, PearsonAndSpearman, Evaluator
 
 import glob
@@ -28,17 +28,20 @@ ALL_MODELS = sum(
 
 COLA, MNLI, MNLI_MM, MRPC, QNLI, QQP, RTE, SST2, STSB, WNLI = \
     'cola', 'mnli', 'mnli-mm', 'mrpc', 'qnli', 'qqp', 'rte', 'sst-2', 'sts-b', 'wnli'
+BERT, VCTRANS = 'bert', 'vctrans'
 
-CLASS_TYPES = {COLA: (ColaReader, BertSequenceClassification, MatthewsCorrcoef(), 'mcc'),
-               MNLI: (MnliReader, BertSequenceClassification, AccAndF1Metrics(acc_only=True), 'acc'),
-               MNLI_MM: (MnliMismatchedReader, BertSequenceClassification, AccAndF1Metrics(acc_only=True), 'acc'),
-               MRPC: (MrpcReader, BertSequenceClassification, AccAndF1Metrics(), 'f1'),
-               QNLI: (QnliReader, BertSequenceClassification, AccAndF1Metrics(acc_only=True), 'acc'),
-               QQP: (QqpReader, BertSequenceClassification, AccAndF1Metrics(), 'f1'),
-               RTE: (RteReader, BertSequenceClassification, AccAndF1Metrics(acc_only=True), 'acc'),
-               SST2: (Sst2Reader, BertSequenceClassification, AccAndF1Metrics(acc_only=True), 'acc'),
-               STSB: (StsbReader, BertSequenceClassification, PearsonAndSpearman(), 'corr'),
-               WNLI: (WnliReader, BertSequenceClassification, AccAndF1Metrics(acc_only=True), 'acc'),
+TRANS_CLS_TYPES = {BERT: BertSequenceClassification, VCTRANS: VCTransSequenceClassification}
+
+CLASS_TYPES = {COLA: (ColaReader, TRANS_CLS_TYPES, MatthewsCorrcoef(), 'mcc'),
+               MNLI: (MnliReader, TRANS_CLS_TYPES, AccAndF1Metrics(acc_only=True), 'acc'),
+               MNLI_MM: (MnliMismatchedReader, TRANS_CLS_TYPES, AccAndF1Metrics(acc_only=True), 'acc'),
+               MRPC: (MrpcReader, TRANS_CLS_TYPES, AccAndF1Metrics(), 'f1'),
+               QNLI: (QnliReader, TRANS_CLS_TYPES, AccAndF1Metrics(acc_only=True), 'acc'),
+               QQP: (QqpReader, TRANS_CLS_TYPES, AccAndF1Metrics(), 'f1'),
+               RTE: (RteReader, TRANS_CLS_TYPES, AccAndF1Metrics(acc_only=True), 'acc'),
+               SST2: (Sst2Reader, TRANS_CLS_TYPES, AccAndF1Metrics(acc_only=True), 'acc'),
+               STSB: (StsbReader, TRANS_CLS_TYPES, PearsonAndSpearman(), 'corr'),
+               WNLI: (WnliReader, TRANS_CLS_TYPES, AccAndF1Metrics(acc_only=True), 'acc'),
                }
 
 
@@ -133,7 +136,7 @@ def main():
 
     ## Model specific parameters
     parser.add_argument("--model_type", default=None, type=str, required=True,
-                        help="Model type selected in the list: bert, roberta")
+                        help="Model type selected in the list: bert, vctrans")
     parser.add_argument("--model_name_or_path", default=None, type=str, required=True,
                         help="Path to pre-trained model or shortcut name selected in the list: " + ", ".join(
                             ALL_MODELS))
@@ -211,6 +214,8 @@ def main():
     data_dir = args.data_dir
     args.corpus = args.corpus.lower()
     reader_class, model_class, metrics, eval_measure = CLASS_TYPES[args.corpus]
+    args.model_type = args.model_type.lower()
+    model_class = model_class[args.model_type]
     args.eval_measure = eval_measure
 
     logger.info("Reading data")
