@@ -131,7 +131,8 @@ class BertInstance(SequenceInstance):
 
     TOKENIZER_CLASSES = {
         'bert': BertTokenizer,
-        'roberta': RobertaTokenizer
+        'roberta': RobertaTokenizer,
+        'vctrans': BertTokenizer
     }
 
     __tokenizer = None
@@ -194,7 +195,7 @@ class BertTokenInstance(BertInstance):
                 if token_labels:
                     subtoken_label = [-1] * len(subtokens)
                     subtoken_label[-1] = label
-            elif self.configs['use_last_subword']:
+            elif not self.configs['use_all_subwords']:
                 sub_tokens_mask = [0] * len(subtokens)
                 sub_tokens_mask[0] = 1
                 if token_labels:
