@@ -39,7 +39,7 @@ class Evaluator(object):
         args.eval_batch_size = batch_size
         batch_processor = InstanceBatchProcessor(args)
         data_loader = DataLoader(dataset=eval_data, sampler=sampler, batch_size=batch_size,
-                                 collate_fn=batch_processor.collate, pin_memory=True, num_workers=3)
+                                 collate_fn=batch_processor.collate, pin_memory=False, num_workers=3)
 
         if predict:
             if args.fp16:
