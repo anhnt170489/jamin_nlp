@@ -6,48 +6,20 @@ import random
 import numpy as np
 import torch
 
-# from core.common import *
 from core.reader import SAReader
-
 from core.training import Trainer
-from libs import BertTokenizerFast, BertConfig, RobertaConfig, BERT_PRETRAINED_CONFIG_ARCHIVE_MAP
 
 # from utils import log_eval_result
 
 logger = logging.getLogger(__name__)
 
-# from utils import cache_data, load_cached_data, make_dirs, handle_checkpoints
+# from utils import handle_checkpoints
 from utils import cache_data, load_cached_data, make_dirs
 
 from core.models import TFSequenceClassification
-# from core.eval import PearsonAndSpearman, Evaluator
-
-import glob
+# from core.eval import Evaluator
 
 from core.eval.metrics import AccAndF1Metrics
-
-ALL_MODELS = BERT_PRETRAINED_CONFIG_ARCHIVE_MAP.keys()
-
-
-# BIOSSES, BC5CDR, HOC, DDI, CHEMPROT, MEDNLI = 'biosses', 'bc5cdr', 'hoc', 'ddi', 'chemprot', 'mednli'
-#
-# CLASS_TYPES = {BIOSSES: (BiossesReader, BertSequenceClassification, PearsonAndSpearman()),
-#                BC5CDR: (BC5CDRReader, BertTokenClassification, AccAndF1Metrics(labels=BC5CDRReader(None).get_labels(),
-#                                                                                ignore_labels=BC5CDRReader(
-#                                                                                    None).get_ignored_labels())),
-#                HOC: (HOCReader, BertMultilabelClassification,
-#                      AccAndF1Metrics(labels=['None'] + HOCReader(None).get_labels())),
-#                DDI: (DDI2013Reader, BertSequenceClassification, AccAndF1Metrics(labels=DDI2013Reader(None).get_labels(),
-#                                                                                 ignore_labels=DDI2013Reader(
-#                                                                                     None).get_ignored_labels(),
-#                                                                                 macro=True, micro=False)),
-#                CHEMPROT: (
-#                    ChemProtReader, BertSequenceClassification,
-#                    AccAndF1Metrics(labels=ChemProtReader(None).get_labels(),
-#                                    ignore_labels=ChemProtReader(None).get_ignored_labels())),
-#                MEDNLI: (
-#                    MedNLIReader, BertSequenceClassification, AccAndF1Metrics(labels=MedNLIReader(None).get_labels()))
-#                }
 
 
 def set_seed(args):
@@ -58,10 +30,9 @@ def set_seed(args):
         torch.cuda.manual_seed_all(args.seed)
 
 
-# def main():
-def main(args):
-    # parser = argparse.ArgumentParser()
-    parser = argparse.ArgumentParser(args)
+def main():
+
+    parser = argparse.ArgumentParser()
     ## Required parameters
     parser.add_argument("--data_dir", default=None, type=str, required=True,
                         help="The input data dir")
@@ -144,8 +115,7 @@ def main(args):
     parser.add_argument("--model_type", default=None, type=str, required=True,
                         help="Model type selected in the list: bert, roberta")
     parser.add_argument("--model_name_or_path", default=None, type=str, required=True,
-                        help="Path to pre-trained model or shortcut name selected in the list: " + ", ".join(
-                            ALL_MODELS))
+                        help="Path to pre-trained model or shortcut name")
     parser.add_argument("--config_name", default="", type=str,
                         help="Pretrained config name or path if not the same as model_name")
     parser.add_argument("--tokenizer_name", default="", type=str,
@@ -164,11 +134,7 @@ def main(args):
     parser.add_argument("--use_all_subwords", action='store_true',
                         help="Set this flag if you choose all the subwords to present the word. ")
 
-    # parser.add_argument("--corpus", default=None, type=str, required=True,
-    #                     help="The data sets to train selected in the list: " + ", ".join(CLASS_TYPES.keys()))
-
-    args = parser.parse_args(args)
-    # args = parser.parse_args()
+    args = parser.parse_args()
 
     if os.path.exists(args.output_dir) and os.listdir(
             args.output_dir) and args.do_train and not args.overwrite_output_dir:
@@ -294,5 +260,5 @@ if __name__ == '__main__':
             '--overwrite_output_dir'
             ]
 
-    main(args)
-    # main()
+    # main(args)
+    main()
