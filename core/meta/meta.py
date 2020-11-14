@@ -23,3 +23,8 @@ class QAInstance(object):
         self.label = label
 
 
+class SAInstance(TextInstances):
+    def __init__(self, id, text, label):
+        super().__init__(text)
+        self.id = id
+        self.label = label

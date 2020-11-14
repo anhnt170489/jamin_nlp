@@ -11,3 +11,4 @@ from .base_instances import SpanInstance
 from .dataset import JaminDataset
 from .meta import NERInstance
 from .meta import QAInstance
+from .meta import SAInstance
