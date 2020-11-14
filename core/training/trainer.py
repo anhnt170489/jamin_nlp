@@ -16,6 +16,7 @@ from core.processor import InstanceProcessor, InstanceBatchProcessor
 from libs import AdamW, get_linear_schedule_with_warmup
 from libs.opt import Lamb, RAdam, Ranger
 from utils import log_eval_result, handle_checkpoints
+from torch.cuda.amp import GradScaler, autocast
 
 logger = logging.getLogger(__name__)
 
@@ -107,12 +108,15 @@ class Trainer(object):
             scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=args.warmup_steps,
                                                         num_training_steps=t_total)
 
-        if args.fp16:
-            try:
-                from apex import amp
-            except ImportError:
-                raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
-            model, optimizer = amp.initialize(model, optimizer, opt_level=args.fp16_opt_level)
+        # if args.fp16:
+        #     try:
+        #         from apex import amp
+        #     except ImportError:
+        #         raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
+        #     model, optimizer = amp.initialize(model, optimizer, opt_level=args.fp16_opt_level)
+        if args.amp:
+            scaler = GradScaler()
+            args.scaler = scaler
 
         if args.local_rank != -1 > 1:
             model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.local_rank],
@@ -152,8 +156,12 @@ class Trainer(object):
                 model.train()
 
                 batch_data = InstanceProcessor.pin_memory_and_to_device(batch, device=args.device, pin_memory=True)
-                outputs = model(batch_data)
 
+                if args.amp:
+                    with autocast():
+                        outputs = model(batch_data)
+                else:
+                    outputs = model(batch_data)
                 loss = outputs[LOSS]
 
                 if args.n_gpu > 1:
@@ -161,16 +169,21 @@ class Trainer(object):
                 if args.gradient_accumulation_steps > 1:
                     loss = loss / args.gradient_accumulation_steps
 
-                if args.fp16:
-                    with amp.scale_loss(loss, optimizer) as scaled_loss:
-                        scaled_loss.backward()
+                # if args.fp16:
+                #     with amp.scale_loss(loss, optimizer) as scaled_loss:
+                #         scaled_loss.backward()
+                if args.amp:
+                    args.scaler.scale(loss).backward()
                 else:
                     loss.backward()
 
                 tr_loss += loss.item()
                 if (step + 1) % args.gradient_accumulation_steps == 0:
-                    if args.fp16:
-                        torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), args.max_grad_norm)
+                    # if args.fp16:
+                    #     torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), args.max_grad_norm)
+                    if args.amp:
+                        args.scaler.step(optimizer)
+                        args.scaler.update()
                     else:
                         torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
                     optimizer.step()

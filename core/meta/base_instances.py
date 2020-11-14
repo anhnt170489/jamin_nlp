@@ -4,7 +4,7 @@ from typing import List
 import torch
 
 from core.common import *
-from libs import BertTokenizer, RobertaTokenizer
+from libs import BertTokenizerFast, RobertaTokenizer
 
 
 class TensorInstance(object):
@@ -130,9 +130,9 @@ class BertInstance(SequenceInstance):
     """Bert instance, including Bert,Roberta, based on huggingface's Transformer"""
 
     TOKENIZER_CLASSES = {
-        'bert': BertTokenizer,
+        'bert': BertTokenizerFast,
         'roberta': RobertaTokenizer,
-        'vctrans': BertTokenizer
+        'vctrans': BertTokenizerFast
     }
 
     __tokenizer = None
