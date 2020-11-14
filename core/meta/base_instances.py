@@ -4,7 +4,7 @@ from typing import List
 import torch
 
 from core.common import *
-from libs import BertTokenizerFast, RobertaTokenizer
+from libs import BertTokenizerFast, RobertaTokenizerFast, XLMRobertaTokenizerFast, PhobertTokenizer
 
 
 class TensorInstance(object):
@@ -126,29 +126,31 @@ class ListInstance(TensorInstance, SequenceInstance):
             return self.empty_tensor
 
 
-class BertInstance(SequenceInstance):
-    """Bert instance, including Bert,Roberta, based on huggingface's Transformer"""
+class TFInstance(SequenceInstance):
+    """TRansformer instance, including Bert,Roberta, XLM-R based on huggingface's Transformer"""
 
     TOKENIZER_CLASSES = {
         'bert': BertTokenizerFast,
-        'roberta': RobertaTokenizer,
-        'vctrans': BertTokenizerFast
+        'roberta': RobertaTokenizerFast,
+        'vctrans': BertTokenizerFast,
+        'xlm-r': XLMRobertaTokenizerFast,
+        'phobert': PhobertTokenizer
     }
 
     __tokenizer = None
 
     @staticmethod
     def get_tokenizer(args=None):
-        if not BertInstance.__tokenizer:
-            tokenizer_class = BertInstance.TOKENIZER_CLASSES[args.model_type]
-            BertInstance.__tokenizer = tokenizer_class.from_pretrained(
+        if not TFInstance.__tokenizer:
+            tokenizer_class = TFInstance.TOKENIZER_CLASSES[args.model_type]
+            TFInstance.__tokenizer = tokenizer_class.from_pretrained(
                 args.tokenizer_name if args.tokenizer_name else args.model_name_or_path,
                 do_lower_case=args.do_lower_case)
-        return BertInstance.__tokenizer
+        return TFInstance.__tokenizer
 
     def __init__(self, args):
-        if not BertInstance.__tokenizer:
-            BertInstance.get_tokenizer(args)
+        if not TFInstance.__tokenizer:
+            TFInstance.get_tokenizer(args)
 
     def pad(self, padding_length):
         raise NotImplementedError()
@@ -157,12 +159,12 @@ class BertInstance(SequenceInstance):
         raise NotImplementedError()
 
 
-class BertTokenInstance(BertInstance):
+class TFTokenInstance(TFInstance):
     """Bert Token instance, a special instance of Bert Instance"""
 
     def __init__(self, args, tokens, token_labels=None):
         super().__init__(args)
-        self.tokenizer = BertTokenInstance.get_tokenizer()
+        self.tokenizer = TFTokenInstance.get_tokenizer()
         self.tokens = tokens
 
         if token_labels:
@@ -282,12 +284,12 @@ class BertTokenInstance(BertInstance):
         return len(self.input_ids)
 
 
-class BertSequenceInstance(BertInstance):
+class TFSequenceInstance(TFInstance):
     """Bert Sequence instance, a special instance of Bert Instance"""
 
     def __init__(self, args, sequence, pair=None):
         super().__init__(args)
-        self.tokenizer = BertSequenceInstance.get_tokenizer()
+        self.tokenizer = TFSequenceInstance.get_tokenizer()
         self.configs = defaultdict()
         self.configs['max_seq_length'] = args.max_seq_length
         pad_on_left = bool(args.model_type in ['xlnet'])
@@ -307,7 +309,8 @@ class BertSequenceInstance(BertInstance):
         if args.ignore_segment_ids:
             self.segment_ids = [0] * len(self.input_ids)
         else:
-            self.segment_ids = inputs["token_type_ids"]
+            self.segment_ids = inputs["token_type_ids"] if "token_type_ids" in inputs.keys() else None
+
         # The mask has 1 for real tokens and 0 for padding tokens. Only real
         # tokens are attended to.
         self.input_mask = [1 if self.configs['mask_padding_with_zero'] else 0] * len(self.input_ids)
@@ -318,33 +321,36 @@ class BertSequenceInstance(BertInstance):
         if self.configs['pad_on_left']:
             self.input_ids = ([pad_token] * length_to_pad) + self.input_ids
             self.input_mask = ([0 if self.configs['mask_padding_with_zero'] else 1] * length_to_pad) + self.input_mask
-            self.segment_ids = ([self.configs['pad_token_segment_id']] * length_to_pad) + self.segment_ids
+            self.segment_ids = ([self.configs[
+                                     'pad_token_segment_id']] * length_to_pad) + self.segment_ids if self.segment_ids is not None else None
         else:
             self.input_ids = self.input_ids + ([pad_token] * length_to_pad)
             self.input_mask = self.input_mask + ([0 if self.configs['mask_padding_with_zero'] else 1] * length_to_pad)
-            self.segment_ids = self.segment_ids + ([self.configs['pad_token_segment_id']] * length_to_pad)
+            self.segment_ids = self.segment_ids + ([self.configs[
+                                                        'pad_token_segment_id']] * length_to_pad) if self.segment_ids is not None else None
 
         assert len(self.input_ids) == padding_length
         assert len(self.input_mask) == padding_length
-        assert len(self.segment_ids) == padding_length
+        if self.segment_ids is not None:
+            assert len(self.segment_ids) == padding_length
 
         return self
 
     def to_tensors(self):
         return (torch.tensor(self.input_ids, dtype=torch.long),
                 torch.tensor(self.input_mask, dtype=torch.long),
-                torch.tensor(self.segment_ids, dtype=torch.long),)
+                torch.tensor(self.segment_ids, dtype=torch.long) if self.segment_ids is not None else None,)
 
     def __len__(self):
         return len(self.input_ids)
 
 
-class BertQAInstance(BertInstance):
+class TFQAInstance(TFInstance):
     """Bert instance for QA task, a special instance of Bert Instance"""
 
     def __init__(self, args, doc_text='', query_text='', doc_tokens=None, query_tokens=None):
         super().__init__(args)
-        self.tokenizer = BertQAInstance.get_tokenizer()
+        self.tokenizer = TFQAInstance.get_tokenizer()
         self.query_tokens = query_tokens
         self.doc_tokens = doc_tokens
 

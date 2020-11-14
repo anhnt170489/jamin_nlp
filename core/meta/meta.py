@@ -21,3 +21,5 @@ class QAInstance(object):
         self.question = question
         self.answer = answer
         self.label = label
+
+
